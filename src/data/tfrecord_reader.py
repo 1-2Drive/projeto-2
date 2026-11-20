@@ -36,6 +36,10 @@ def get_default_data_dir() -> Path:
     if candidate.exists() and any(candidate.glob("*.tfrecord*")):
         return candidate
 
+    downloads = Path("~/Downloads").expanduser().resolve()
+    if downloads.exists() and any(downloads.glob("*.tfrecord*")):
+        return downloads
+
     return local_raw
 
 
