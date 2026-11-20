@@ -1,9 +1,9 @@
 # Raw data protection - Waymo dataset must not be committed
-data/raw/*.tfrecord*
-data/raw/*.tfrecord
+data/raw/
 *.tfrecord
-*.tfrecord-*
+*.tfrecord*
 *.tfrecords
+*.bin
 
 # Environment and Python
 .env
