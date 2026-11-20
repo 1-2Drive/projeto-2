@@ -1,0 +1,74 @@
+{
+  "dataset_metadata": {
+    "directory": "/Users/ctw04483/Downloads/archive",
+    "file_count": 2,
+    "files": [
+      {
+        "path": "/Users/ctw04483/Downloads/archive/training_20s.tfrecord-00000-of-01000",
+        "filename": "training_20s.tfrecord-00000-of-01000",
+        "bytes": 94580752,
+        "size_mb": 90.2
+      },
+      {
+        "path": "/Users/ctw04483/Downloads/archive/training_20s.tfrecord-00001-of-01000",
+        "filename": "training_20s.tfrecord-00001-of-01000",
+        "bytes": 98219608,
+        "size_mb": 93.67
+      }
+    ],
+    "total_bytes": 192800360,
+    "total_mb": 183.87
+  },
+  "scenarios_analyzed": 100,
+  "statistics": {
+    "total_tracks": 8998,
+    "vehicles": 8113,
+    "pedestrians": 832,
+    "cyclists": 53,
+    "other": 0,
+    "map_features": {
+      "total": 31966,
+      "lanes": 19754,
+      "road_edges": 4109,
+      "road_lines": 3700,
+      "crosswalks": 768,
+      "speed_bumps": 485,
+      "stop_signs": 345,
+      "driveways": 2805
+    }
+  },
+  "quality_audit": {
+    "overall_passed": true,
+    "summary_quality": {
+      "total_scenarios": 100,
+      "duplicate_scenario_ids": 0,
+      "nan_counts": {},
+      "ego_valid_count": 100,
+      "ego_valid_percentage": 100.0,
+      "passed": true
+    },
+    "objects_quality": {
+      "total_records": 8998,
+      "valid_records": 2867,
+      "duplicate_object_ids_in_scenario": 0,
+      "negative_speeds": 0,
+      "infinite_speeds": 0,
+      "excessive_speeds_gt_80ms": 0,
+      "valid_records_with_nan_coords": 0,
+      "min_speed_ms": 0.0,
+      "max_speed_ms": 27.72424499822173,
+      "mean_speed_ms": 2.798327846768972,
+      "passed": true
+    },
+    "ego_quality": {
+      "total_records": 100,
+      "nan_speeds": 0,
+      "negative_speeds": 0,
+      "infinite_speeds": 0,
+      "min_ego_speed_ms": 0.00016041955049228093,
+      "max_ego_speed_ms": 20.210337237248446,
+      "mean_ego_speed_ms": 5.016490415648523,
+      "passed": true
+    }
+  }
+}

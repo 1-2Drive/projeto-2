@@ -1,0 +1,45 @@
+table_name,column_name,data_type,unit_or_format,description,example_value
+scenario_summary,scenario_id,string,Hex string,Unique identifier for the 20-second driving scenario,41600af30ab8cc55
+scenario_summary,timestamps_count,integer,Count,Total recorded time steps in scenario (~10 Hz),198
+scenario_summary,current_time_index,integer,Index,Index of current observation timestamp,0
+scenario_summary,num_tracks,integer,Count,Total unique agent tracks recorded across the scenario,54
+scenario_summary,num_vehicles,integer,Count,Number of vehicle agents identified,42
+scenario_summary,num_pedestrians,integer,Count,Number of pedestrian agents identified,8
+scenario_summary,num_cyclists,integer,Count,Number of cyclist agents identified,2
+scenario_summary,num_other,integer,Count,Number of other/unset dynamic objects,2
+scenario_summary,num_map_features,integer,Count,Total HD vector map elements associated with scenario,217
+scenario_summary,num_dynamic_map_states,integer,Count,Number of dynamic map states (traffic signals),198
+scenario_summary,ego_valid,boolean,True/False,Whether Autonomous/SDC vehicle state is valid at current step,True
+scenario_summary,sdc_track_index,integer,Index,Index of SDC track in tracks array,53
+scenario_summary,num_lanes,integer,Count,Number of vector lane centerline features,180
+scenario_summary,num_road_edges,integer,Count,Number of road boundary/edge features,25
+scenario_summary,num_road_lines,integer,Count,Number of road paint line features,12
+scenario_summary,num_crosswalks,integer,Count,Number of pedestrian crosswalk features,4
+scenario_summary,num_speed_bumps,integer,Count,Number of speed bump features,2
+scenario_summary,num_stop_signs,integer,Count,Number of stop sign features,2
+scenario_summary,num_driveways,integer,Count,Number of driveway boundary features,8
+objects_current,scenario_id,string,Hex string,Identifier of scenario containing the object,41600af30ab8cc55
+objects_current,object_id,integer,Integer ID,Unique track ID within the scenario,201
+objects_current,object_type,string,VEHICLE/PEDESTRIAN/CYCLIST/OTHER,Classification of the tracked object,VEHICLE
+objects_current,is_ego,boolean,True/False,Flag indicating whether track is the autonomous vehicle (SDC),False
+objects_current,x,float,Meters (UTM/local),Bounding box center X coordinate,8435.12
+objects_current,y,float,Meters (UTM/local),Bounding box center Y coordinate,660.45
+objects_current,z,float,Meters (UTM/local),Bounding box center Z coordinate,-134.10
+objects_current,velocity_x,float,m/s,Instantaneous linear velocity along X axis,4.25
+objects_current,velocity_y,float,m/s,Instantaneous linear velocity along Y axis,-1.10
+objects_current,speed,float,m/s,Planar speed magnitude: sqrt(vx^2 + vy^2),4.39
+objects_current,heading,float,"Radians [-pi, pi]",Yaw heading angle of bounding box,-0.25
+objects_current,length,float,Meters,Bounding box extent along longitudinal heading axis,4.80
+objects_current,width,float,Meters,Bounding box extent along lateral axis,2.10
+objects_current,height,float,Meters,Bounding box vertical height,1.75
+objects_current,valid,boolean,True/False,Whether bounding box state is valid/observed at this timestamp,True
+ego_current,scenario_id,string,Hex string,Scenario identifier,41600af30ab8cc55
+ego_current,ego_x,float,Meters,Ego vehicle center X coordinate,8431.89
+ego_current,ego_y,float,Meters,Ego vehicle center Y coordinate,654.18
+ego_current,ego_speed,float,m/s,Ego planar speed: sqrt(vx^2 + vy^2),0.35
+ego_current,ego_velocity_x,float,m/s,Ego longitudinal/lateral velocity X component,0.002
+ego_current,ego_velocity_y,float,m/s,Ego longitudinal/lateral velocity Y component,-0.348
+ego_current,ego_heading,float,"Radians [-pi, pi]",Ego vehicle yaw heading orientation,-1.559
+ego_current,nearby_vehicle_count,integer,Count within 50m,Number of active vehicles within 50-meter radius of Ego,5
+ego_current,nearby_pedestrian_count,integer,Count within 50m,Number of active pedestrians within 50-meter radius of Ego,1
+ego_current,nearby_cyclist_count,integer,Count within 50m,Number of active cyclists within 50-meter radius of Ego,0
