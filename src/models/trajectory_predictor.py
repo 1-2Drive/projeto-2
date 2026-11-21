@@ -11,7 +11,7 @@ import time
 from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.tree import DecisionTreeRegressor
 
@@ -118,6 +118,13 @@ class MLTrajectoryPredictor(BasePredictor):
         "past_speed_mean",
         "past_heading_change",
         "ego_speed",
+        "closing_speed",
+        "ttc",
+        "azimuth_angle",
+        "longitudinal_gap",
+        "lateral_gap",
+        "yaw_rate_1s",
+        "agent_accel_est",
     ]
 
     TARGET_COLS = [
@@ -146,6 +153,17 @@ class MLTrajectoryPredictor(BasePredictor):
         elif model_type == "knn":
             self.model = KNeighborsRegressor(n_neighbors=kwargs.get("n_neighbors", 7), n_jobs=-1)
             self.name = f"KNN (k={kwargs.get('n_neighbors', 7)})"
+        elif model_type == "gradient_boosting":
+            # MultiOutput using HistGradientBoosting
+            from sklearn.multioutput import MultiOutputRegressor
+            base_gb = HistGradientBoostingRegressor(
+                max_iter=kwargs.get("max_iter", 100),
+                max_depth=kwargs.get("max_depth", 6),
+                learning_rate=kwargs.get("learning_rate", 0.1),
+                random_state=42,
+            )
+            self.model = MultiOutputRegressor(base_gb, n_jobs=-1)
+            self.name = f"Gradient Boosting (HistGB, iter={kwargs.get('max_iter', 100)})"
         else:
             raise ValueError(f"Unknown model_type: {model_type}")
 

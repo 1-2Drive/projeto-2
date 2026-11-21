@@ -49,6 +49,13 @@ def mock_trajectory_df():
         "past_dy_1s": np.random.uniform(0, 3, n),
         "past_speed_mean": np.random.uniform(2, 10, n),
         "past_heading_change": np.random.uniform(-0.1, 0.1, n),
+        "closing_speed": np.random.uniform(-2, 4, n),
+        "ttc": np.random.uniform(5, 50, n),
+        "azimuth_angle": np.random.uniform(-np.pi, np.pi, n),
+        "longitudinal_gap": np.random.uniform(5, 25, n),
+        "lateral_gap": np.random.uniform(-5, 5, n),
+        "yaw_rate_1s": np.random.uniform(-0.1, 0.1, n),
+        "agent_accel_est": np.random.uniform(-1, 1, n),
     }
 
     # Ground truth future displacements
@@ -102,6 +109,17 @@ def test_ml_trajectory_predictor_dt(mock_trajectory_df):
     predictor = MLTrajectoryPredictor(model_type="decision_tree", max_depth=4)
     predictor.fit(train_df)
     metrics, _ = evaluate_trajectory_predictor(predictor, test_df)
+    assert metrics.ade_1s > 0.0
+
+
+def test_ml_trajectory_predictor_gb(mock_trajectory_df):
+    train_df = mock_trajectory_df.iloc[:70]
+    test_df = mock_trajectory_df.iloc[70:]
+
+    predictor = MLTrajectoryPredictor(model_type="gradient_boosting", max_iter=20, max_depth=3)
+    predictor.fit(train_df)
+    metrics, preds = evaluate_trajectory_predictor(predictor, test_df)
+    assert preds["3s"].shape == (len(test_df), 2)
     assert metrics.ade_1s > 0.0
 
 

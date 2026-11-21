@@ -102,6 +102,7 @@ def main():
         ConstantAccelerationPredictor(),
         MLTrajectoryPredictor(model_type="decision_tree", max_depth=6),
         MLTrajectoryPredictor(model_type="random_forest", n_estimators=60, max_depth=8),
+        MLTrajectoryPredictor(model_type="gradient_boosting", max_iter=80, max_depth=5),
     ]
 
     metrics_list = []

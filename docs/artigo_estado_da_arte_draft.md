@@ -67,33 +67,35 @@ A arquitetura implementada no repositório `1-2Drive/projeto-2` é composta por 
 [Métricas em Malha Fechada]: Colisão %, TTC Mínimo, Desacelerações de Emergência
 ```
 
-### 3.1 Engenharia de Características (Feature Engineering)
-Para cada veículo alvo $i$ no instante $t$, as variáveis são transformadas para o referencial local do veículo ego:
-- Posição relativa: $x_{rel}, y_{rel}$
-- Velocidade relativa: $v_{x,rel}, v_{y,rel}$
-- Orientação relativa: $\Delta \theta = (\theta_{agent} - \theta_{ego}) \pmod{2\pi}$
-- Distância euclidiana ao ego: $d = \sqrt{x_{rel}^2 + y_{rel}^2}$
+### 3.1 Engenharia de Características (Feature Engineering com Pandas & NumPy)
+Para cada veículo alvo $i$ no instante $t$, as variáveis são transformadas de forma vetorizada com **NumPy** e **Pandas** para o referencial local do veículo ego:
+- Posição e gaps relativos: $x_{rel}, y_{rel}$, `longitudinal_gap`, `lateral_gap`
+- Cinemática de aproximação: `closing_speed`, `ttc` (Time-To-Collision vetorial), `azimuth_angle`
+- Orientação e dinâmica: $\Delta \theta = (\theta_{agent} - \theta_{ego}) \pmod{2\pi}$, taxa de guinada (`yaw_rate_1s`), aceleração estimada (`agent_accel_est`)
 - Histórico cinemático (janela de 10 passos = 1.0s): $\Delta x_{past}, \Delta y_{past}, \bar{v}_{past}, \Delta \theta_{past}$.
+- Rotulagem vetorial de manobras (*np.select*): `STRAIGHT`, `TURN_LEFT`, `TURN_RIGHT`, `DECELERATING`, `ACCELERATING`.
 
 ---
 
 ## 4. Resultados Experimentais
 
 ### 4.1 Benchmark de Predição de Trajetória (ML)
-Avaliámos os modelos em 1.158 amostras de teste independentes (extraídas de cenários nunca vistos no treino):
+Avaliámos os modelos em 1.218 amostras de teste independentes (extraídas de 45 cenários nunca vistos no treino, totalizando 6.142 amostras em escala):
 
 | Modelo | ADE @ 1.0s (m) | FDE @ 1.0s (m) | ADE @ 3.0s (m) | FDE @ 3.0s (m) | ADE @ 5.0s (m) | FDE @ 5.0s (m) | Latência (ms) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Constant Velocity (CV)** | 0.725 | 0.725 | 3.065 | 5.404 | 6.357 | 12.941 | < 0.001 |
-| **Constant Acceleration (CA)** | 0.450 | 0.450 | 2.002 | 3.554 | 5.002 | 11.003 | < 0.001 |
-| **Decision Tree (depth=6)** | 1.756 | 1.756 | 4.499 | 7.242 | 8.224 | 15.673 | < 0.001 |
-| **Random Forest (trees=60)** | 1.104 | 1.104 | 3.384 | 5.664 | 6.643 | 13.161 | 0.012 |
+| **Constant Velocity (CV)** | 0.712 | 0.712 | 2.932 | 5.151 | 6.024 | 12.208 | < 0.001 |
+| **Constant Acceleration (CA)** | 0.496 | 0.496 | 2.140 | 3.785 | 5.629 | 12.606 | < 0.001 |
+| **Decision Tree (depth=6)** | 1.459 | 1.459 | 3.650 | 5.842 | 6.495 | 12.185 | < 0.001 |
+| **Random Forest (trees=60)** | 0.772 | 0.772 | 2.327 | 3.883 | 4.760 | 9.624 | 0.012 |
+| **Gradient Boosting (HistGB)** | **0.514** | **0.514** | **1.954** | **3.394** | **4.315** | **9.036** | 1.109 |
 
 *Principais fatores preditivos identificados pelo Random Forest:*
-1. `agent_vy` (46.0%) e `agent_vx` (44.9%): Componentes primárias de velocidade instantânea.
-2. `agent_speed` (3.6%): Magnitude escalar de movimento.
-3. `past_dx_1s` (1.2%): Persistência inercial observada no último segundo.
-4. `past_heading_change` (1.1%): Sinal indicador de início de manobra de curva ou desvio.
+1. `agent_vy` (45.2%) e `agent_vx` (43.2%): Componentes primárias de velocidade instantânea.
+2. `agent_speed` (5.1%): Magnitude escalar de movimento.
+3. `agent_accel_est` (2.0%): Variação de aceleração derivada vetorialmente.
+4. `past_speed_mean` (0.9%) e `past_dy_1s` (0.6%): Persistência inercial.
+5. `yaw_rate_1s` (0.5%): Variação angular de guinada.
 
 ### 4.2 Avaliação em Malha Fechada do Planeador A*
 Avaliámos o comportamento de navegação do SDC em 25 cenários interativos críticos (veículo obstáculo a menos de 25m e com desvio lateral $<4.0$m):
