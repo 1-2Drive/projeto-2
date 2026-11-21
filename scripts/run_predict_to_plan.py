@@ -23,10 +23,13 @@ sys.path.insert(0, str(ROOT))
 
 from src.data.tfrecord_reader import discover_tfrecords, iter_scenarios
 from src.preprocessing.sequence_extractor import SequenceExtractor
+from src.features.pandas_feature_pipeline import PandasFeaturePipeline
 from src.models.trajectory_predictor import (
-    ConstantVelocityPredictor,
     ConstantAccelerationPredictor,
+    ConstantVelocityPredictor,
+    ManeuverClassifier,
     MLTrajectoryPredictor,
+    evaluate_maneuver_classifier,
     evaluate_trajectory_predictor,
 )
 from src.planning.astar_planner import AStarTrajectoryPlanner
@@ -81,21 +84,12 @@ def main():
         df_samples.to_csv(csv_path, index=False)
         print(f"✓ Saved extracted samples to {csv_path}")
 
-    # 3. Benchmarking Trajectory Predictors (Physics vs ML)
-    print("\n[3/5] Benchmarking Trajectory Predictors (Physics vs ML)...")
-    unique_scenarios = list(df_samples["scenario_id"].unique())
-    import random
-    random.seed(42)
-    random.shuffle(unique_scenarios)
-    split_idx = int(len(unique_scenarios) * 0.75)
-    train_scenarios = set(unique_scenarios[:split_idx])
+    # 3. Benchmarking Trajectory Predictors & Maneuver Classifiers
+    print("\n[3/5] Benchmarking Trajectory Predictors & Maneuver Classifiers (Physics vs ML)...")
+    df_train, df_test = PandasFeaturePipeline.create_scenario_based_split(df_samples, test_size=0.25, random_state=42)
 
-    train_mask = df_samples["scenario_id"].isin(train_scenarios)
-    df_train = df_samples[train_mask].copy()
-    df_test = df_samples[~train_mask].copy()
-
-    print(f"  Train set: {len(df_train)} samples across {len(train_scenarios)} scenarios")
-    print(f"  Test set:  {len(df_test)} samples across {len(unique_scenarios) - len(train_scenarios)} scenarios")
+    print(f"  Train set: {len(df_train)} samples across {df_train['scenario_id'].nunique()} scenarios")
+    print(f"  Test set:  {len(df_test)} samples across {df_test['scenario_id'].nunique()} scenarios")
 
     predictors = [
         ConstantVelocityPredictor(),
@@ -124,13 +118,35 @@ def main():
 
     # Feature Importance analysis
     rf_model = trained_models.get("random_forest")
+    importances = None
     if rf_model:
         importances = rf_model.get_feature_importances()
         print("\n--- Top Predictive Features (Random Forest) ---")
         print(importances.head(8).to_string())
 
-    # 4. Closed-Loop Planning Evaluation
-    print("\n[4/5] Running Spatiotemporal A* Speed & Collision Planner...")
+    # Maneuver Intent Classification Benchmark
+    print("\n--- Maneuver Intent Classification Benchmark ---")
+    classifiers = [
+        ManeuverClassifier(model_type="random_forest", n_estimators=60, max_depth=8),
+        ManeuverClassifier(model_type="gradient_boosting", max_iter=80, max_depth=5),
+    ]
+    clf_metrics = []
+    for clf in classifiers:
+        print(f"  Training {clf.name}...")
+        clf.fit(df_train)
+        res = evaluate_maneuver_classifier(clf, df_test)
+        clf_metrics.append({
+            "Classifier": clf.name,
+            "Accuracy": res["accuracy"],
+            "F1-Macro": res["f1_macro"],
+            "F1-Weighted": res["f1_weighted"],
+        })
+        print(f"    -> {clf.name}: Accuracy = {res['accuracy']:.4f} | F1-Macro = {res['f1_macro']:.4f} | F1-Weighted = {res['f1_weighted']:.4f}")
+
+    df_clf_metrics = pd.DataFrame(clf_metrics)
+
+    # 4. Multi-Obstacle Closed-Loop Planning Evaluation
+    print("\n[4/5] Running Spatiotemporal A* Speed & Collision Planner (Multi-Obstacle)...")
     planner = AStarTrajectoryPlanner(
         horizon_steps=30,  # 3.0 seconds horizon
         dt=0.1,
@@ -142,54 +158,71 @@ def main():
     plan_modes = ["Uninformed (Reactive)", "Constant Velocity", "ML Predicted (Random Forest)", "Oracle (Ground Truth)"]
     planning_results = {mode: [] for mode in plan_modes}
 
-    # Select representative close interactive encounters from test set (obstacle in front of ego)
-    interactive_candidates = df_test[
-        (df_test["distance_to_ego"] < 25.0) &
-        (df_test["rel_y"].abs() < 4.0) &
-        (df_test["rel_x"] > 2.0)
-    ]
-    test_samples = interactive_candidates.head(25)
-    print(f"  Evaluating {len(test_samples)} safety-critical interactive scenarios...")
+    # Group test samples by (scenario_id, current_time_step) to find multi-obstacle scenes
+    scene_groups = df_test.groupby(["scenario_id", "current_time_step"])
+    valid_scenes = []
+    for (scen_id, t_step), group in scene_groups:
+        # Check if there is at least one interactive obstacle ahead of ego
+        has_critical = (
+            (group["distance_to_ego"] < 25.0) &
+            (group["rel_y"].abs() < 4.0) &
+            (group["rel_x"] > 1.0)
+        ).any()
+        if has_critical:
+            valid_scenes.append(group)
 
-    for _, sample in test_samples.iterrows():
-        ego_v = sample["ego_speed"]
+    print(f"  Found {len(valid_scenes)} multi-obstacle safety-critical interactive test scenes.")
+    eval_scenes = valid_scenes[:30]
+    total_obstacles_evaluated = sum(len(g) for g in eval_scenes)
+    print(f"  Evaluating {len(eval_scenes)} distinct scenes with a total of {total_obstacles_evaluated} simultaneous dynamic obstacles...")
+
+    for scene_df in eval_scenes:
+        ego_sample = scene_df.iloc[0]
+        ego_v = float(ego_sample["ego_speed"])
+
         # Ego path straight ahead along ego heading
         path_length = 60.0
         s_pts = np.linspace(0, path_length, 60)
         ego_path = np.column_stack([
-            sample["ego_x"] + s_pts * np.cos(sample["ego_heading"]),
-            sample["ego_y"] + s_pts * np.sin(sample["ego_heading"]),
+            ego_sample["ego_x"] + s_pts * np.cos(ego_sample["ego_heading"]),
+            ego_sample["ego_y"] + s_pts * np.sin(ego_sample["ego_heading"]),
         ])
 
-        # True obstacle trajectory over 30 steps
-        obs_x0 = sample["agent_x"]
-        obs_y0 = sample["agent_y"]
-        obs_vx = sample["agent_vx"]
-        obs_vy = sample["agent_vy"]
+        gt_obstacles = {}
+        uninformed_obs = {}
+        cv_obs = {}
+        ml_obs = {}
 
-        # 1) Ground truth trajectory (using actual displacement)
-        gt_traj = []
-        for step in range(31):
-            ratio = step / 30.0
-            gx = obs_x0 + sample["future_dx_3s"] * ratio
-            gy = obs_y0 + sample["future_dy_3s"] * ratio
-            gt_traj.append((gx, gy))
-        gt_obstacles = {sample["track_id"]: gt_traj}
+        for _, obs_row in scene_df.iterrows():
+            tid = int(obs_row["track_id"])
+            ox0 = float(obs_row["agent_x"])
+            oy0 = float(obs_row["agent_y"])
+            ovx = float(obs_row["agent_vx"])
+            ovy = float(obs_row["agent_vy"])
 
-        # 2) Uninformed: obstacle stays at x0, y0
-        uninformed_traj = [(obs_x0, obs_y0)] * 31
-        uninformed_obs = {sample["track_id"]: uninformed_traj}
+            # 1) Ground truth trajectory
+            gt_traj = []
+            for step in range(31):
+                ratio = step / 30.0
+                gx = ox0 + float(obs_row["future_dx_3s"]) * ratio
+                gy = oy0 + float(obs_row["future_dy_3s"]) * ratio
+                gt_traj.append((gx, gy))
+            gt_obstacles[tid] = gt_traj
 
-        # 3) Constant Velocity: obs_x0 + vx * t
-        cv_traj = [(obs_x0 + obs_vx * (step * 0.1), obs_y0 + obs_vy * (step * 0.1)) for step in range(31)]
-        cv_obs = {sample["track_id"]: cv_traj}
+            # 2) Uninformed trajectory: obstacle assumed stationary
+            uninformed_obs[tid] = [(ox0, oy0)] * 31
 
-        # 4) ML Predicted: using Random Forest
-        rf_preds = rf_model.predict_displacements(pd.DataFrame([sample]))
-        rf_dx3s = rf_preds["3s"][0, 0]
-        rf_dy3s = rf_preds["3s"][0, 1]
-        ml_traj = [(obs_x0 + rf_dx3s * (step / 30.0), obs_y0 + rf_dy3s * (step / 30.0)) for step in range(31)]
-        ml_obs = {sample["track_id"]: ml_traj}
+            # 3) Constant Velocity trajectory
+            cv_obs[tid] = [(ox0 + ovx * (step * 0.1), oy0 + ovy * (step * 0.1)) for step in range(31)]
+
+            # 4) ML Predicted trajectory
+            if rf_model is not None:
+                rf_p = rf_model.predict_displacements(pd.DataFrame([obs_row]))
+                p_dx = float(rf_p["3s"][0, 0])
+                p_dy = float(rf_p["3s"][0, 1])
+                ml_obs[tid] = [(ox0 + p_dx * (step / 30.0), oy0 + p_dy * (step / 30.0)) for step in range(31)]
+            else:
+                ml_obs[tid] = cv_obs[tid]
 
         # Plan for each modality
         configs = [
@@ -260,9 +293,11 @@ def main():
     axes[0].grid(axis="y", linestyle="--", alpha=0.5)
 
     # Collision rate comparison bar chart
-    axes[1].bar(df_plan_summary["Planning Modality"], df_plan_summary["Collision Rate (%)"], color=["#ef4444", "#f97316", "#10b981", "#059669"])
+    x_plan = np.arange(len(df_plan_summary))
+    axes[1].bar(x_plan, df_plan_summary["Collision Rate (%)"], color=["#ef4444", "#f97316", "#10b981", "#059669"])
     axes[1].set_ylabel("Collision Rate (%)")
     axes[1].set_title("Closed-Loop Planner Collision Rate Comparison")
+    axes[1].set_xticks(x_plan)
     axes[1].set_xticklabels([m.split("(")[0].strip() for m in df_plan_summary["Planning Modality"]], rotation=15)
     axes[1].grid(axis="y", linestyle="--", alpha=0.5)
 
@@ -278,12 +313,14 @@ def main():
     results_md_path = docs_dir / "predict_to_plan_results.md"
     with open(results_md_path, "w") as f:
         f.write("# Resultados Experimentais: Prever para Planear (Predict to Plan)\n\n")
-        f.write("## 1. Benchmark de Modelos de Predição de Trajetória (ML)\n\n")
+        f.write("## 1. Benchmark de Modelos de Predição de Trajetória (Regressão Contínua)\n\n")
         f.write(df_metrics.to_markdown(index=False) + "\n\n")
+        f.write("## 2. Benchmark de Classificação de Intenção / Manobra (Classificação Multiclasse)\n\n")
+        f.write(df_clf_metrics.to_markdown(index=False) + "\n\n")
         if rf_model and importances is not None:
-            f.write("## 2. Importância das Features (Random Forest)\n\n")
+            f.write("## 3. Importância das Features (Random Forest)\n\n")
             f.write(importances.head(10).to_markdown() + "\n\n")
-        f.write("## 3. Avaliação em Malha Fechada do Planeador A* com Evasão de Obstáculos\n\n")
+        f.write("## 4. Avaliação em Malha Fechada do Planeador A* com Evasão de Múltiplos Obstáculos\n\n")
         f.write(df_plan_summary.to_markdown(index=False) + "\n\n")
         f.write(f"![Resultados do Benchmark](../reports/figures/predict_to_plan_benchmark.png)\n")
 

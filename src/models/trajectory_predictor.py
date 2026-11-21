@@ -8,12 +8,21 @@ Evaluates standard autonomous driving metrics: ADE, FDE, and inference latency.
 
 from dataclasses import dataclass
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
+from sklearn.ensemble import (
+    HistGradientBoostingClassifier,
+    HistGradientBoostingRegressor,
+    RandomForestClassifier,
+    RandomForestRegressor,
+)
+from sklearn.metrics import accuracy_score, classification_report, f1_score
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.tree import DecisionTreeRegressor
+
+
+from src.features.pandas_feature_pipeline import PandasFeaturePipeline
 
 
 @dataclass
@@ -71,9 +80,6 @@ class ConstantAccelerationPredictor(BasePredictor):
         vx = df["agent_vx"].to_numpy()
         vy = df["agent_vy"].to_numpy()
 
-        # past displacement over 1s: past_dx_1s
-        # v_mean = past_d / 1.0
-        # a = 2 * (v_curr - v_mean) / dt
         past_dx = df["past_dx_1s"].to_numpy()
         past_dy = df["past_dy_1s"].to_numpy()
 
@@ -99,42 +105,11 @@ class ConstantAccelerationPredictor(BasePredictor):
 class MLTrajectoryPredictor(BasePredictor):
     """
     Machine Learning regressor predicting multi-horizon future trajectory displacements.
-    Supports Decision Tree, Random Forest, and KNN.
+    Supports Decision Tree, Random Forest, KNN, and Gradient Boosting.
     """
 
-    FEATURE_COLS = [
-        "agent_speed",
-        "agent_heading",
-        "agent_vx",
-        "agent_vy",
-        "rel_x",
-        "rel_y",
-        "rel_vx",
-        "rel_vy",
-        "rel_heading",
-        "distance_to_ego",
-        "past_dx_1s",
-        "past_dy_1s",
-        "past_speed_mean",
-        "past_heading_change",
-        "ego_speed",
-        "closing_speed",
-        "ttc",
-        "azimuth_angle",
-        "longitudinal_gap",
-        "lateral_gap",
-        "yaw_rate_1s",
-        "agent_accel_est",
-    ]
-
-    TARGET_COLS = [
-        "future_dx_1s",
-        "future_dy_1s",
-        "future_dx_3s",
-        "future_dy_3s",
-        "future_dx_5s",
-        "future_dy_5s",
-    ]
+    FEATURE_COLS = PandasFeaturePipeline.FEATURE_COLS
+    TARGET_COLS = PandasFeaturePipeline.TARGET_REGRESSION_COLS
 
     def __init__(self, model_type: str = "random_forest", **kwargs):
         self.model_type = model_type
@@ -226,3 +201,72 @@ def evaluate_trajectory_predictor(
         mean_inference_time_ms=round(latency_ms, 4),
     )
     return metrics, preds
+
+
+class ManeuverClassifier:
+    """
+    Classifies vehicle intention at horizon t+3.0s into one of:
+    - STRAIGHT, TURN_LEFT, TURN_RIGHT, DECELERATING, ACCELERATING.
+    """
+
+    FEATURE_COLS = PandasFeaturePipeline.FEATURE_COLS
+    TARGET_COL = PandasFeaturePipeline.TARGET_MANEUVER_COL
+
+    def __init__(self, model_type: str = "random_forest", **kwargs):
+        self.model_type = model_type
+        if model_type == "random_forest":
+            self.model = RandomForestClassifier(
+                n_estimators=kwargs.get("n_estimators", 80),
+                max_depth=kwargs.get("max_depth", 8),
+                class_weight="balanced",
+                random_state=42,
+                n_jobs=-1,
+            )
+            self.name = f"Random Forest Classifier (trees={kwargs.get('n_estimators', 80)})"
+        elif model_type == "gradient_boosting":
+            self.model = HistGradientBoostingClassifier(
+                max_iter=kwargs.get("max_iter", 100),
+                max_depth=kwargs.get("max_depth", 6),
+                class_weight="balanced",
+                random_state=42,
+            )
+            self.name = f"HistGradientBoosting Classifier (iter={kwargs.get('max_iter', 100)})"
+        else:
+            raise ValueError(f"Unknown classifier model_type: {model_type}")
+
+    def fit(self, df_train: pd.DataFrame):
+        X = df_train[self.FEATURE_COLS].to_numpy()
+        y = df_train[self.TARGET_COL].to_numpy()
+        self.model.fit(X, y)
+        return self
+
+    def predict(self, df: pd.DataFrame) -> np.ndarray:
+        X = df[self.FEATURE_COLS].to_numpy()
+        return self.model.predict(X)
+
+    def predict_proba(self, df: pd.DataFrame) -> np.ndarray:
+        X = df[self.FEATURE_COLS].to_numpy()
+        return self.model.predict_proba(X)
+
+
+def evaluate_maneuver_classifier(
+    classifier: ManeuverClassifier, df_eval: pd.DataFrame
+) -> Dict[str, Any]:
+    """
+    Evaluates classification performance (Accuracy, Macro-F1, Weighted-F1).
+    """
+    y_true = df_eval[classifier.TARGET_COL].to_numpy()
+    y_pred = classifier.predict(df_eval)
+
+    acc = float(accuracy_score(y_true, y_pred))
+    f1_macro = float(f1_score(y_true, y_pred, average="macro"))
+    f1_weighted = float(f1_score(y_true, y_pred, average="weighted"))
+    rep = classification_report(y_true, y_pred, output_dict=True)
+
+    return {
+        "model_name": classifier.name,
+        "accuracy": round(acc, 4),
+        "f1_macro": round(f1_macro, 4),
+        "f1_weighted": round(f1_weighted, 4),
+        "report": rep,
+    }

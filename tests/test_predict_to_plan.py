@@ -9,10 +9,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.features.pandas_feature_pipeline import PandasFeaturePipeline
 from src.models.trajectory_predictor import (
     ConstantAccelerationPredictor,
     ConstantVelocityPredictor,
+    ManeuverClassifier,
     MLTrajectoryPredictor,
+    evaluate_maneuver_classifier,
     evaluate_trajectory_predictor,
 )
 from src.planning.astar_planner import AStarTrajectoryPlanner
@@ -65,6 +68,11 @@ def mock_trajectory_df():
     data["future_dy_3s"] = data["agent_vy"] * 3.0 + np.random.normal(0, 0.3, n)
     data["future_dx_5s"] = data["agent_vx"] * 5.0 + np.random.normal(0, 0.5, n)
     data["future_dy_5s"] = data["agent_vy"] * 5.0 + np.random.normal(0, 0.5, n)
+    data["future_agent_dx_3s"] = data["future_dx_3s"]
+    data["future_agent_dy_3s"] = data["future_dy_3s"]
+    data["maneuver_class"] = np.random.choice(
+        ["STRAIGHT", "TURN_LEFT", "TURN_RIGHT", "DECELERATING", "ACCELERATING"], size=n
+    )
 
     return pd.DataFrame(data)
 
@@ -151,3 +159,50 @@ def test_astar_planner_collision_avoidance():
     )
     assert res.total_travel_distance > 0.0
     assert res.average_speed >= 0.0
+
+
+def test_maneuver_classifier_rf(mock_trajectory_df):
+    train_df = mock_trajectory_df.iloc[:70]
+    test_df = mock_trajectory_df.iloc[70:]
+
+    clf = ManeuverClassifier(model_type="random_forest", n_estimators=20, max_depth=5)
+    clf.fit(train_df)
+
+    res = evaluate_maneuver_classifier(clf, test_df)
+    assert res["accuracy"] >= 0.0
+    assert res["f1_macro"] >= 0.0
+    assert "report" in res
+
+    preds = clf.predict(test_df)
+    assert len(preds) == len(test_df)
+    assert set(preds).issubset({"STRAIGHT", "TURN_LEFT", "TURN_RIGHT", "DECELERATING", "ACCELERATING"})
+
+
+def test_maneuver_classifier_gb(mock_trajectory_df):
+    train_df = mock_trajectory_df.iloc[:70]
+    test_df = mock_trajectory_df.iloc[70:]
+
+    clf = ManeuverClassifier(model_type="gradient_boosting", max_iter=20, max_depth=3)
+    clf.fit(train_df)
+
+    res = evaluate_maneuver_classifier(clf, test_df)
+    assert res["accuracy"] >= 0.0
+    assert res["f1_macro"] >= 0.0
+
+
+def test_pandas_feature_pipeline_split(mock_trajectory_df):
+    X, y_reg, y_cls, groups, metadata = PandasFeaturePipeline.get_feature_target_split(mock_trajectory_df)
+
+    assert X.shape[1] == len(PandasFeaturePipeline.FEATURE_COLS)
+    assert y_reg.shape[1] == len(PandasFeaturePipeline.TARGET_REGRESSION_COLS)
+    assert len(y_cls) == len(mock_trajectory_df)
+    assert len(groups) == len(mock_trajectory_df)
+    assert metadata.shape[1] == len(PandasFeaturePipeline.METADATA_COLS)
+
+    # Check scenario-based split
+    df_train, df_test = PandasFeaturePipeline.create_scenario_based_split(mock_trajectory_df, test_size=0.3)
+    train_scenarios = set(df_train["scenario_id"].unique())
+    test_scenarios = set(df_test["scenario_id"].unique())
+    # Zero leakage between scenarios
+    assert len(train_scenarios.intersection(test_scenarios)) == 0
+

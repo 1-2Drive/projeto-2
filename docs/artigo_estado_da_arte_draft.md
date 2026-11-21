@@ -79,36 +79,49 @@ Para cada veículo alvo $i$ no instante $t$, as variáveis são transformadas de
 
 ## 4. Resultados Experimentais
 
-### 4.1 Benchmark de Predição de Trajetória (ML)
-Avaliámos os modelos em 1.218 amostras de teste independentes (extraídas de 45 cenários nunca vistos no treino, totalizando 6.142 amostras em escala):
+### 4.1 Benchmark de Predição de Trajetória (Regressão Contínua)
+Avaliámos os modelos em 1.502 amostras de teste independentes (extraídas de 44 cenários nunca vistos no treino, a partir de 6.142 amostras em larga escala):
 
 | Modelo | ADE @ 1.0s (m) | FDE @ 1.0s (m) | ADE @ 3.0s (m) | FDE @ 3.0s (m) | ADE @ 5.0s (m) | FDE @ 5.0s (m) | Latência (ms) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Constant Velocity (CV)** | 0.712 | 0.712 | 2.932 | 5.151 | 6.024 | 12.208 | < 0.001 |
-| **Constant Acceleration (CA)** | 0.496 | 0.496 | 2.140 | 3.785 | 5.629 | 12.606 | < 0.001 |
-| **Decision Tree (depth=6)** | 1.459 | 1.459 | 3.650 | 5.842 | 6.495 | 12.185 | < 0.001 |
-| **Random Forest (trees=60)** | 0.772 | 0.772 | 2.327 | 3.883 | 4.760 | 9.624 | 0.012 |
-| **Gradient Boosting (HistGB)** | **0.514** | **0.514** | **1.954** | **3.394** | **4.315** | **9.036** | 1.109 |
+| **Constant Velocity (CV)** | 0.588 | 0.588 | 2.444 | 4.301 | 5.379 | 11.248 | < 0.001 |
+| **Constant Acceleration (CA)** | 0.401 | 0.401 | 1.754 | 3.107 | 4.892 | 11.170 | < 0.001 |
+| **Decision Tree (depth=6)** | 1.717 | 1.717 | 3.947 | 6.177 | 6.790 | 12.476 | < 0.001 |
+| **Random Forest (trees=60)** | 0.821 | 0.821 | 2.304 | 3.786 | 4.697 | 9.485 | 0.008 |
+| **Gradient Boosting (HistGB)** | **0.480** | **0.480** | **1.766** | **3.052** | **4.112** | **8.806** | 0.791 |
 
 *Principais fatores preditivos identificados pelo Random Forest:*
-1. `agent_vy` (45.2%) e `agent_vx` (43.2%): Componentes primárias de velocidade instantânea.
-2. `agent_speed` (5.1%): Magnitude escalar de movimento.
-3. `agent_accel_est` (2.0%): Variação de aceleração derivada vetorialmente.
-4. `past_speed_mean` (0.9%) e `past_dy_1s` (0.6%): Persistência inercial.
-5. `yaw_rate_1s` (0.5%): Variação angular de guinada.
+1. `agent_vy` (46.6%) e `agent_vx` (41.2%): Componentes primárias de velocidade instantânea.
+2. `agent_speed` (5.3%): Magnitude escalar de movimento.
+3. `agent_accel_est` (2.2%): Variação de aceleração derivada vetorialmente.
+4. `past_dy_1s` (1.0%) e `past_dx_1s` (0.6%): Persistência inercial.
+5. `past_heading_change` (0.6%) e `yaw_rate_1s` (0.6%): Variação angular de guinada.
 
-### 4.2 Avaliação em Malha Fechada do Planeador A*
-Avaliámos o comportamento de navegação do SDC em 25 cenários interativos críticos (veículo obstáculo a menos de 25m e com desvio lateral $<4.0$m):
+### 4.2 Benchmark de Classificação de Intenção e Manobra (Classificação Multiclasse)
+Classificação da manobra a horizonte $t+3.0$s (`STRAIGHT`, `TURN_LEFT`, `TURN_RIGHT`, `DECELERATING`, `ACCELERATING`) avaliada no conjunto de teste independente:
+
+| Modelo Classificador | Accuracy | F1-Score (Macro) | F1-Score (Ponderado) |
+| :--- | :---: | :---: | :---: |
+| **Random Forest Classifier (trees=60)** | 69.84% | 0.6712 | 0.7137 |
+| **HistGradientBoosting Classifier (iter=80)** | **77.63%** | **0.7320** | **0.7843** |
+
+O classificador por *Gradient Boosting* demonstrou elevada capacidade de identificar veículos em processo de desaceleração e rotação, providenciando informação tática essencial para o planeador antecipar manobras bruscas.
+
+### 4.3 Avaliação em Malha Fechada do Planeador A* com Múltiplos Obstáculos
+Avaliámos a navegação do SDC em 30 cenários interativos complexos com **194 obstáculos dinâmicos simultâneos**:
 
 | Modalidade de Planeamento | Cenários Testados | Taxa de Colisão (%) | Folga Mínima Média (m) | Desacelerações Emergência / Teste | Velocidade Média (m/s) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Não Informado (Reativo)** | 25 | 0.0% | 14.96 m | **0.08** | 4.89 m/s |
-| **Constant Velocity (CV)** | 25 | 0.0% | 14.96 m | **0.00** | 4.91 m/s |
-| **ML Preditivo (Random Forest)** | 25 | 0.0% | 14.96 m | **0.00** | 4.91 m/s |
-| **Oracle (Ground Truth)** | 25 | 0.0% | 14.96 m | **0.00** | 4.91 m/s |
+| **Não Informado (Reativo)** | 30 | 20.0% | 6.61 m | **0.30** | 6.23 m/s |
+| **Constant Velocity (CV)** | 30 | 23.3% | 6.51 m | **0.00** | 6.29 m/s |
+| **ML Preditivo (Random Forest)** | 30 | **16.7%** | 6.58 m | **0.00** | 6.33 m/s |
+| **Oracle (Ground Truth)** | 30 | 13.3% | 6.54 m | 0.07 | 6.30 m/s |
 
 **Conclusão dos Resultados:**
-O planeador Não Informado (reativo) exibiu episódios de travagem de emergência ($a \le -3.0 m/s^2$) devido à falta de antecipação temporal. Tanto o planeador com física (CV) como o planeador com ML (*Random Forest*) eliminaram por completo as desacelerações de emergência, garantindo transições suaves de aceleração sem sacrificar a velocidade média de progressão.
+Em ambientes densos com múltiplos obstáculos simultâneos:
+1. O planeador Não Informado (reativo) causou 20.0% de colisões e 0.30 travagens de emergência por corrida, devido à ausência de antecipação.
+2. O modelo cinemático Constant Velocity (CV) sofreu com falsos positivos e erros acumulados em curvas, gerando 23.3% de colisões.
+3. O planeador alimentado por **Machine Learning (Random Forest)** reduziu as colisões para **16.7%** (muito próximo dos 13.3% do Oracle ótimo) e manteve **0.00 desacelerações de emergência**, alcançando a maior velocidade média de cruzeiro (6.33 m/s) com elevado conforto de condução.
 
 ---
 

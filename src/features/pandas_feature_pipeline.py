@@ -17,6 +17,96 @@ class PandasFeaturePipeline:
     Performs fully vectorized transformations on trajectory sequences.
     """
 
+    METADATA_COLS = [
+        "scenario_id",
+        "track_id",
+        "object_type",
+        "current_time_step",
+    ]
+
+    # Global coordinates: deliberately EXCLUDED from ML features to guarantee translation/rotation invariance
+    GLOBAL_COORD_COLS = [
+        "ego_x",
+        "ego_y",
+        "ego_heading",
+        "agent_x",
+        "agent_y",
+        "agent_heading",
+    ]
+
+    # Input Features (X): strictly ego-relative kinematics and local dynamic features
+    FEATURE_COLS = [
+        "agent_speed",
+        "agent_vx",
+        "agent_vy",
+        "rel_x",
+        "rel_y",
+        "rel_vx",
+        "rel_vy",
+        "rel_heading",
+        "distance_to_ego",
+        "closing_speed",
+        "ttc",
+        "azimuth_angle",
+        "longitudinal_gap",
+        "lateral_gap",
+        "past_dx_1s",
+        "past_dy_1s",
+        "past_speed_mean",
+        "past_heading_change",
+        "yaw_rate_1s",
+        "agent_accel_est",
+        "ego_speed",
+    ]
+
+    TARGET_REGRESSION_COLS = [
+        "future_dx_1s",
+        "future_dy_1s",
+        "future_dx_3s",
+        "future_dy_3s",
+        "future_dx_5s",
+        "future_dy_5s",
+    ]
+
+    TARGET_MANEUVER_COL = "maneuver_class"
+
+    @classmethod
+    def get_feature_target_split(
+        cls, df: pd.DataFrame
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.DataFrame]:
+        """
+        Splits a processed DataFrame into:
+        - X (features only, no IDs or global coordinates)
+        - y_reg (regression displacement targets)
+        - y_cls (maneuver classification target)
+        - groups (scenario_id series for group-aware CV)
+        - metadata (scenario_id, track_id, timesteps for traceability)
+        """
+        X = df[cls.FEATURE_COLS].copy()
+        y_reg = df[cls.TARGET_REGRESSION_COLS].copy()
+        y_cls = df[cls.TARGET_MANEUVER_COL].copy() if cls.TARGET_MANEUVER_COL in df.columns else None
+        groups = df["scenario_id"].copy()
+        metadata = df[cls.METADATA_COLS].copy()
+        return X, y_reg, y_cls, groups, metadata
+
+    @classmethod
+    def create_scenario_based_split(
+        cls, df: pd.DataFrame, test_size: float = 0.25, random_state: int = 42
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Scenario-level split (Group-aware) to strictly prevent data leakage across train and test sets.
+        Ensures all time-steps from a given scenario belong exclusively to either train or test.
+        """
+        unique_scenarios = pd.Series(df["scenario_id"].unique())
+        test_scenarios = set(unique_scenarios.sample(frac=test_size, random_state=random_state))
+
+        train_mask = ~df["scenario_id"].isin(test_scenarios)
+        test_mask = df["scenario_id"].isin(test_scenarios)
+
+        df_train = df[train_mask].reset_index(drop=True)
+        df_test = df[test_mask].reset_index(drop=True)
+        return df_train, df_test
+
     @staticmethod
     def clean_and_filter_outliers(df: pd.DataFrame) -> pd.DataFrame:
         """
