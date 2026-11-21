@@ -1,5 +1,6 @@
 # Raw data protection - Waymo dataset must not be committed
 data/raw/
+data/processed/*.csv
 *.tfrecord
 *.tfrecord*
 *.tfrecords

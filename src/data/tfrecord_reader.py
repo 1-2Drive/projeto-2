@@ -65,8 +65,11 @@ def discover_tfrecords(
         raise FileNotFoundError(f"Waymo data directory does not exist: {target_dir}")
 
     files = sorted(target_dir.glob(pattern))
-    # Filter out hidden or non-file entries
-    files = [f for f in files if f.is_file() and not f.name.startswith(".")]
+    # Filter out hidden, temporary part files, or non-file entries
+    files = [
+        f for f in files
+        if f.is_file() and not f.name.startswith(".") and not f.name.endswith(".part")
+    ]
 
     if not files:
         raise FileNotFoundError(
