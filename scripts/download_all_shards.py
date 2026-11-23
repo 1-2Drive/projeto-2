@@ -10,11 +10,7 @@ import time
 import urllib.parse
 import urllib.request
 
-TOKEN = (
-    "eyJhbGciOiJSUzI1NiIsImtpZCI6IjlFNTIwQ0YyOTQ3NEM2MzVBMTQ0RUNDNDY4MDNFNjlDOUM4MEE3QzYiLCJ0eXAiOiJKV1QiLCJ4NXQiOiJubElNOHBSMHhqV2hST3pFYUFQbW5KeUFwOFkifQ."
-    "eyJ1cG4iOiIxMjYwNDI5QGlzZXAuaXBwLnB0IiwicHVpZCI6IjEwMDMyMDA2MTg1NDA0NTYiLCJjYWNoZWtleSI6IjBoLmZ8bWVtYmVyc2hpcHwxMDAzMjAwNjE4NTQwNDU2QGxpdmUuY29tIiwidmVyIjoiYnJvd3NlciIsInRpZCI6IjdhNjBhNjI5LWU2MWYtNDMwYy05YzYzLTI2NjY1M2IyYjg5OSIsImFwcGlkIjoiYzU4NjM3YmItZTJlMS00MzEyLThhMDAtMDRiNWZmY2QzNDAzIiwiYXBwX2Rpc3BsYXluYW1lIjoiU2hhcmVQb2ludCBPbmxpbmUgQ2xpZW50IEV4dGVuc2liaWxpdHkiLCJzY3AiOiJGaWxlcy5SZWFkV3JpdGUuQWxsIFNpdGVzLk1hbmFnZS5BbGwgU2l0ZXMuRnVsbENvbnRyb2wuQWxsIFRlcm1TdG9yZS5SZWFkV3JpdGUuQWxsIE0zNjVCaWxsaW5nUGxhdGZvcm0uUmVhZC5BbGwiLCJpcGFkZHIiOiI3OC4xMzcuMTk1LjE2MSIsInNpZCI6IjAwOGJjZDJhLWFjMjQtN2NjYi1hNzIzLTQ5OWNhNWE4YTJmNiIsInNpZ25pbl9zdGF0ZSI6IltcImttc2lcIl0iLCJ1dGkiOiJ4MVFjRGVELU1VR0pCSFpPZjVoUUFBIiwib2lkIjoiZTI3ZmVkN2MtMzBlZS00YjViLThiMWQtZWM2ZWUxZmNkNjBiIiwiZmlkIjoiMTg5MTIyIiwiaXNzIjoiMDAwMDAwMDMtMDAwMC0wZmYxLWNlMDAtMDAwMDAwMDAwMDAwIiwiYXVkIjoiMDAwMDAwMDMtMDAwMC0wZmYxLWNlMDAtMDAwMDAwMDAwMDAwQDdhNjBhNjI5LWU2MWYtNDMwYy05YzYzLTI2NjY1M2IyYjg5OSIsIm5iZiI6IjE3OTUyNjMzMDUiLCJleHAiOiIxNzk1MjY2OTA1In0."
-    "rTZcM06SFSxiumhNgrOEvxaQ_zngjTMssu6MqmyGaNkqQTJUqz1uzK2P9zIdRBtihV0Ad06kRnqq1vtySgnnZ-pcuHwrDg6K8LZjvrHES3fQKeVLKofzQyvsGdIRP_fmR4_lxvZaZseBnfPhV6hBsvaomi3hyk7P2M3zHgJS6dIGwQWOuEpsdT2AiOHiDdGSww74Vx8Jz4RhYUFiIPMida60MpLTyaGZRbyA1E_-5EHlJ9g8fR-iNcDnBN4OSrwu2GlHnkxkNnwINkh7g_u2gWZiXWWIG-M8GABkAbKFBjFfmKxIzo7-GP4je8ExeNiCvoYRYY0ebTQYF8jjkWus-g"
-)
+TOKEN = os.environ.get("SHAREPOINT_TOKEN", "")
 
 SHARDS = [
     ("testing.tfrecord-00000-of-00150.bin", "7E532650-CFB8-490C-B98B-391D8A3638BA", 195017008),
@@ -78,6 +74,9 @@ def download_shard(filename, unique_id, expected_size, out_dir):
 
 
 def main():
+    if not TOKEN:
+        print("[WARNING] SHAREPOINT_TOKEN environment variable is not set.", file=sys.stderr)
+        print("Set it before running: export SHAREPOINT_TOKEN='<your_token>'", file=sys.stderr)
     target_dir = os.path.expanduser("~/Downloads/archive")
     os.makedirs(target_dir, exist_ok=True)
     print(f"Target directory: {target_dir}")

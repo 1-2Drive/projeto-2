@@ -34,9 +34,71 @@ class PlanResult:
     emergency_braking_events: int
     total_travel_distance: float
     average_speed: float
+    obb_collision_occurred: bool = False
+    initial_overlap_detected: bool = False
     trajectory_s: List[float] = field(default_factory=list)
     trajectory_v: List[float] = field(default_factory=list)
     trajectory_a: List[float] = field(default_factory=list)
+
+
+def check_obb_collision(
+    ax: float,
+    ay: float,
+    a_head: float,
+    a_l: float,
+    a_w: float,
+    bx: float,
+    by: float,
+    b_head: float,
+    b_l: float,
+    b_w: float,
+    safety_margin: float = 0.1,
+) -> bool:
+    """
+    Checks collision between two 2D oriented bounding boxes using the Separating Axis Theorem (SAT).
+    a_l, a_w: length and width of box A (meters).
+    b_l, b_w: length and width of box B (meters).
+    safety_margin: expansion buffer added to half-dimensions.
+    Returns True if boxes overlap (collision), False if a separating axis exists.
+    """
+    hla = a_l * 0.5 + safety_margin
+    hwa = a_w * 0.5 + safety_margin
+    hlb = b_l * 0.5 + safety_margin
+    hwb = b_w * 0.5 + safety_margin
+
+    ca, sa = np.cos(a_head), np.sin(a_head)
+    cb, sb = np.cos(b_head), np.sin(b_head)
+
+    axes = ((ca, sa), (-sa, ca), (cb, sb), (-sb, cb))
+    dx = bx - ax
+    dy = by - ay
+
+    for ux, uy in axes:
+        dist = abs(dx * ux + dy * uy)
+        ra = hla * abs(ca * ux + sa * uy) + hwa * abs(-sa * ux + ca * uy)
+        rb = hlb * abs(cb * ux + sb * uy) + hwb * abs(-sb * ux + cb * uy)
+        if dist > (ra + rb):
+            return False
+    return True
+
+
+def compute_wilson_score_interval(
+    successes: int, total: int, confidence: float = 0.95
+) -> Tuple[float, float, float]:
+    """
+    Computes the Wilson score confidence interval for a binomial proportion.
+    Returns: (rate_pct, lower_bound_pct, upper_bound_pct).
+    """
+    if total == 0:
+        return 0.0, 0.0, 0.0
+    p = successes / total
+    z = 1.959964  # 95% two-tailed confidence z-score
+    denominator = 1.0 + (z**2) / total
+    centre_adjusted_probability = p + (z**2) / (2.0 * total)
+    adjusted_std_dev = np.sqrt(max(0.0, (p * (1.0 - p) + (z**2) / (4.0 * total)) / total))
+    lower = max(0.0, (centre_adjusted_probability - z * adjusted_std_dev) / denominator)
+    upper = min(1.0, (centre_adjusted_probability + z * adjusted_std_dev) / denominator)
+    return p * 100.0, lower * 100.0, upper * 100.0
 
 
 class AStarTrajectoryPlanner:
@@ -171,10 +233,14 @@ class AStarTrajectoryPlanner:
         v_traj: List[float],
         a_traj: List[float],
         gt_obstacles: Dict[int, List[Tuple[float, float]]],
+        ego_heading: float = 0.0,
+        gt_headings: Optional[Dict[int, float]] = None,
+        obb_safety_margin: float = 0.1,
     ) -> PlanResult:
         """
         Evaluates the executed plan against true ground truth obstacles.
         Computes safety, minimum TTC/distance, and emergency braking occurrences.
+        If gt_headings is provided, computes exact Oriented Bounding Box (OBB / SAT) collision.
         """
         dists = np.linalg.norm(np.diff(ego_path_xy, axis=0), axis=1)
         s_coords = np.insert(np.cumsum(dists), 0, 0.0)
@@ -192,8 +258,20 @@ class AStarTrajectoryPlanner:
             return float(pt[0]), float(pt[1])
 
         collision = False
+        obb_collision = False
+        initial_overlap = False
         min_dist = float("inf")
         emergency_brakes = 0
+
+        # Check initial overlap at t=0
+        if gt_headings is not None:
+            ex0, ey0 = s_to_xy(s_traj[0]) if s_traj else (float(ego_path_xy[0, 0]), float(ego_path_xy[0, 1]))
+            for track_id, gt_traj in gt_obstacles.items():
+                ox0, oy0 = gt_traj[0]
+                o_head = gt_headings.get(track_id, ego_heading)
+                if check_obb_collision(ex0, ey0, ego_heading, 4.88, 2.02, ox0, oy0, o_head, 4.7, 1.9, safety_margin=0.0):
+                    initial_overlap = True
+                    break
 
         for t_idx, (s, a) in enumerate(zip(s_traj, a_traj)):
             ego_x, ego_y = s_to_xy(s)
@@ -205,6 +283,11 @@ class AStarTrajectoryPlanner:
                     min_dist = d
                 if d < self.safety_radius:
                     collision = True
+
+                if gt_headings is not None and not obb_collision:
+                    o_head = gt_headings.get(track_id, ego_heading)
+                    if check_obb_collision(ego_x, ego_y, ego_heading, 4.88, 2.02, ox, oy, o_head, 4.7, 1.9, safety_margin=obb_safety_margin):
+                        obb_collision = True
 
             if a <= -3.0:
                 emergency_brakes += 1
@@ -220,6 +303,8 @@ class AStarTrajectoryPlanner:
             emergency_braking_events=emergency_brakes,
             total_travel_distance=round(total_distance, 2),
             average_speed=round(avg_speed, 2),
+            obb_collision_occurred=obb_collision,
+            initial_overlap_detected=initial_overlap,
             trajectory_s=s_traj,
             trajectory_v=v_traj,
             trajectory_a=a_traj,

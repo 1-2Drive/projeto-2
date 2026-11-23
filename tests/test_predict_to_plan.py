@@ -18,7 +18,11 @@ from src.models.trajectory_predictor import (
     evaluate_maneuver_classifier,
     evaluate_trajectory_predictor,
 )
-from src.planning.astar_planner import AStarTrajectoryPlanner
+from src.planning.astar_planner import (
+    AStarTrajectoryPlanner,
+    check_obb_collision,
+    compute_wilson_score_interval,
+)
 from src.preprocessing.sequence_extractor import SequenceExtractor, TrajectorySample
 
 
@@ -205,4 +209,52 @@ def test_pandas_feature_pipeline_split(mock_trajectory_df):
     test_scenarios = set(df_test["scenario_id"].unique())
     # Zero leakage between scenarios
     assert len(train_scenarios.intersection(test_scenarios)) == 0
+
+
+def test_check_obb_collision_sat():
+    # 1. Parallel vehicles in adjacent lanes (3.5m lateral distance): should NOT collide
+    assert not check_obb_collision(
+        ax=0.0, ay=0.0, a_head=0.0, a_l=4.8, a_w=2.0,
+        bx=0.0, by=3.5, b_head=0.0, b_l=4.8, b_w=2.0,
+        safety_margin=0.1
+    )
+
+    # 2. Side-by-side vehicle with only 1.8m lateral gap: SHOULD collide
+    assert check_obb_collision(
+        ax=0.0, ay=0.0, a_head=0.0, a_l=4.8, a_w=2.0,
+        bx=0.0, by=1.8, b_head=0.0, b_l=4.8, b_w=2.0,
+        safety_margin=0.1
+    )
+
+    # 3. In-lane vehicle ahead by 3.0m (bumper overlap): SHOULD collide
+    assert check_obb_collision(
+        ax=0.0, ay=0.0, a_head=0.0, a_l=4.8, a_w=2.0,
+        bx=3.0, by=0.0, b_head=0.0, b_l=4.8, b_w=2.0,
+        safety_margin=0.1
+    )
+
+    # 4. In-lane vehicle ahead by 6.0m: should NOT collide
+    assert not check_obb_collision(
+        ax=0.0, ay=0.0, a_head=0.0, a_l=4.8, a_w=2.0,
+        bx=6.0, by=0.0, b_head=0.0, b_l=4.8, b_w=2.0,
+        safety_margin=0.1
+    )
+
+
+def test_compute_wilson_score_interval():
+    # 0 out of 100
+    rate, lower, upper = compute_wilson_score_interval(0, 100)
+    assert rate == 0.0
+    assert 0.0 <= lower <= upper <= 5.0
+
+    # 5 out of 100
+    rate, lower, upper = compute_wilson_score_interval(5, 100)
+    assert rate == 5.0
+    assert 1.0 <= lower < 5.0 < upper <= 12.0
+
+    # 50 out of 100
+    rate, lower, upper = compute_wilson_score_interval(50, 100)
+    assert rate == 50.0
+    assert 40.0 <= lower < 50.0 < upper <= 60.0
+
 

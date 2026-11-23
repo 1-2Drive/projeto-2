@@ -32,7 +32,10 @@ from src.models.trajectory_predictor import (
     evaluate_maneuver_classifier,
     evaluate_trajectory_predictor,
 )
-from src.planning.astar_planner import AStarTrajectoryPlanner
+from src.planning.astar_planner import (
+    AStarTrajectoryPlanner,
+    compute_wilson_score_interval,
+)
 
 
 def main():
@@ -172,26 +175,28 @@ def main():
             valid_scenes.append(group)
 
     print(f"  Found {len(valid_scenes)} multi-obstacle safety-critical interactive test scenes.")
-    eval_scenes = valid_scenes[:30]
+    eval_scenes = valid_scenes  # Evaluate all valid test scenes
     total_obstacles_evaluated = sum(len(g) for g in eval_scenes)
     print(f"  Evaluating {len(eval_scenes)} distinct scenes with a total of {total_obstacles_evaluated} simultaneous dynamic obstacles...")
 
     for scene_df in eval_scenes:
         ego_sample = scene_df.iloc[0]
         ego_v = float(ego_sample["ego_speed"])
+        ego_heading = float(ego_sample["ego_heading"])
 
-        # Ego path straight ahead along ego heading
+        # Longitudinal reference path along ego heading
         path_length = 60.0
         s_pts = np.linspace(0, path_length, 60)
         ego_path = np.column_stack([
-            ego_sample["ego_x"] + s_pts * np.cos(ego_sample["ego_heading"]),
-            ego_sample["ego_y"] + s_pts * np.sin(ego_sample["ego_heading"]),
+            ego_sample["ego_x"] + s_pts * np.cos(ego_heading),
+            ego_sample["ego_y"] + s_pts * np.sin(ego_heading),
         ])
 
         gt_obstacles = {}
         uninformed_obs = {}
         cv_obs = {}
         ml_obs = {}
+        gt_headings = {}
 
         for _, obs_row in scene_df.iterrows():
             tid = int(obs_row["track_id"])
@@ -199,14 +204,22 @@ def main():
             oy0 = float(obs_row["agent_y"])
             ovx = float(obs_row["agent_vx"])
             ovy = float(obs_row["agent_vy"])
+            o_head = float(obs_row["agent_heading"])
+            gt_headings[tid] = o_head
 
-            # 1) Ground truth trajectory
+            # 1) Ground truth trajectory with piecewise linear interpolation (1s and 3s)
+            p1_x = ox0 + float(obs_row["future_dx_1s"])
+            p1_y = oy0 + float(obs_row["future_dy_1s"])
+            p3_x = ox0 + float(obs_row["future_dx_3s"])
+            p3_y = oy0 + float(obs_row["future_dy_3s"])
             gt_traj = []
             for step in range(31):
-                ratio = step / 30.0
-                gx = ox0 + float(obs_row["future_dx_3s"]) * ratio
-                gy = oy0 + float(obs_row["future_dy_3s"]) * ratio
-                gt_traj.append((gx, gy))
+                if step <= 10:
+                    ratio = step / 10.0
+                    gt_traj.append((ox0 + (p1_x - ox0) * ratio, oy0 + (p1_y - oy0) * ratio))
+                else:
+                    ratio = (step - 10) / 20.0
+                    gt_traj.append((p1_x + (p3_x - p1_x) * ratio, p1_y + (p3_y - p1_y) * ratio))
             gt_obstacles[tid] = gt_traj
 
             # 2) Uninformed trajectory: obstacle assumed stationary
@@ -215,12 +228,22 @@ def main():
             # 3) Constant Velocity trajectory
             cv_obs[tid] = [(ox0 + ovx * (step * 0.1), oy0 + ovy * (step * 0.1)) for step in range(31)]
 
-            # 4) ML Predicted trajectory
+            # 4) ML Predicted trajectory (piecewise 1s and 3s predictions)
             if rf_model is not None:
                 rf_p = rf_model.predict_displacements(pd.DataFrame([obs_row]))
-                p_dx = float(rf_p["3s"][0, 0])
-                p_dy = float(rf_p["3s"][0, 1])
-                ml_obs[tid] = [(ox0 + p_dx * (step / 30.0), oy0 + p_dy * (step / 30.0)) for step in range(31)]
+                m1_x = ox0 + float(rf_p["1s"][0, 0])
+                m1_y = oy0 + float(rf_p["1s"][0, 1])
+                m3_x = ox0 + float(rf_p["3s"][0, 0])
+                m3_y = oy0 + float(rf_p["3s"][0, 1])
+                ml_traj = []
+                for step in range(31):
+                    if step <= 10:
+                        ratio = step / 10.0
+                        ml_traj.append((ox0 + (m1_x - ox0) * ratio, oy0 + (m1_y - oy0) * ratio))
+                    else:
+                        ratio = (step - 10) / 20.0
+                        ml_traj.append((m1_x + (m3_x - m1_x) * ratio, m1_y + (m3_y - m1_y) * ratio))
+                ml_obs[tid] = ml_traj
             else:
                 ml_obs[tid] = cv_obs[tid]
 
@@ -245,6 +268,9 @@ def main():
                 v_traj=v_tr,
                 a_traj=a_tr,
                 gt_obstacles=gt_obstacles,
+                ego_heading=ego_heading,
+                gt_headings=gt_headings,
+                obb_safety_margin=0.1,
             )
             planning_results[mode_name].append(res)
 
@@ -254,8 +280,12 @@ def main():
         if not results:
             continue
         total_runs = len(results)
-        collision_count = sum(1 for r in results if r.collision_occurred)
-        collision_rate = (collision_count / total_runs) * 100.0
+        obb_col_count = sum(1 for r in results if r.obb_collision_occurred)
+        obb_rate, obb_lower, obb_upper = compute_wilson_score_interval(obb_col_count, total_runs)
+
+        circle_col_count = sum(1 for r in results if r.collision_occurred)
+        circle_rate, circ_lower, circ_upper = compute_wilson_score_interval(circle_col_count, total_runs)
+
         avg_min_dist = float(np.mean([r.min_distance_to_obstacle for r in results]))
         avg_emergency = float(np.mean([r.emergency_braking_events for r in results]))
         avg_speed = float(np.mean([r.average_speed for r in results]))
@@ -263,14 +293,15 @@ def main():
         plan_summary_rows.append({
             "Planning Modality": mode_name,
             "Scenarios Tested": total_runs,
-            "Collision Rate (%)": round(collision_rate, 1),
+            "OBB Collision Rate (%)": f"{obb_rate:.1f}% [{obb_lower:.1f}, {obb_upper:.1f}]",
+            "Clearance < 3.5m (%)": f"{circle_rate:.1f}% [{circ_lower:.1f}, {circ_upper:.1f}]",
             "Min Clearance (m)": round(avg_min_dist, 2),
             "Emergency Decels / Run": round(avg_emergency, 2),
             "Avg Speed (m/s)": round(avg_speed, 2),
         })
 
     df_plan_summary = pd.DataFrame(plan_summary_rows)
-    print("\n--- Spatiotemporal Planning & Collision Benchmark ---")
+    print("\n--- Spatiotemporal Planning & Collision Benchmark (Full Test Set) ---")
     print(df_plan_summary.to_string(index=False))
 
     # 5. Generate Figures and Artifacts
@@ -292,13 +323,17 @@ def main():
     axes[0].legend()
     axes[0].grid(axis="y", linestyle="--", alpha=0.5)
 
-    # Collision rate comparison bar chart
+    # Collision rate comparison bar chart (OBB vs 3.5m Clearance)
     x_plan = np.arange(len(df_plan_summary))
-    axes[1].bar(x_plan, df_plan_summary["Collision Rate (%)"], color=["#ef4444", "#f97316", "#10b981", "#059669"])
-    axes[1].set_ylabel("Collision Rate (%)")
-    axes[1].set_title("Closed-Loop Planner Collision Rate Comparison")
+    obb_vals = [float(row["OBB Collision Rate (%)"].split("%")[0]) for _, row in df_plan_summary.iterrows()]
+    circ_vals = [float(row["Clearance < 3.5m (%)"].split("%")[0]) for _, row in df_plan_summary.iterrows()]
+    axes[1].bar(x_plan - width/2, obb_vals, width, label="OBB Collision Rate (%)", color="#ef4444")
+    axes[1].bar(x_plan + width/2, circ_vals, width, label="Clearance < 3.5m (%)", color="#f97316")
+    axes[1].set_ylabel("Rate (%)")
+    axes[1].set_title("Planner Safety: Real Bounding Box (OBB) vs 3.5m Buffer")
     axes[1].set_xticks(x_plan)
     axes[1].set_xticklabels([m.split("(")[0].strip() for m in df_plan_summary["Planning Modality"]], rotation=15)
+    axes[1].legend()
     axes[1].grid(axis="y", linestyle="--", alpha=0.5)
 
     plt.tight_layout()
