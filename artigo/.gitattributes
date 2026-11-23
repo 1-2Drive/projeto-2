@@ -1,7 +1,0 @@
-# O build.sh e os ficheiros da Springer têm de manter fins de linha Unix,
-# mesmo quando o repositório é clonado em Windows.
-build.sh     text eol=lf
-Makefile     text eol=lf
-llncs.cls    text eol=lf
-splncs04.bst text eol=lf
-*.pdf        binary

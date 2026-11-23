@@ -1,9 +1,10 @@
 # Artigo científico — Prever para Planear (versão única)
 
 Esta pasta junta os dois rascunhos anteriores: o texto, as referências
-conferidas e os resultados de `artigo/`, e as figuras, a tabela de
+conferidas e os resultados do primeiro rascunho em LaTeX (a antiga pasta
+`artigo/`, entretanto removida), e as figuras, a tabela de
 comparação e a justificação das escolhas de `docs/paper/`, refeitas com o
-modelo atual. É a versão a manter; as outras duas ficam como histórico.
+modelo atual. É a versão a manter; `docs/paper/` fica como histórico.
 
 Fontes LaTeX do artigo, no formato **Springer LNCS** (o mesmo do template
 «Springer Conference Proceedings Template» do Overleaf, versão de

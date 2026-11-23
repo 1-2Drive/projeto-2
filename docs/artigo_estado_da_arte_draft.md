@@ -3,7 +3,7 @@
 *Mestrado em Engenharia de Inteligência Artificial (MEIA) — ISEP*  
 *Unidades Curriculares: Aprendizagem Automática & Sistemas de Decisão e Planeamento*
 
-> A versão para entrega está em LaTeX, no formato Springer LNCS, na pasta [`artigo/`](../artigo/) (PDF em `artigo/build/artigo.pdf`). O texto é o mesmo; convém editar lá, para não haver duas versões diferentes. As referências foram todas conferidas e estão em `artigo/referencias.bib`.
+> Este rascunho é uma versão anterior. A versão atual do artigo está em LaTeX, no formato Springer LNCS, na pasta [`artigo_final/`](../artigo_final/) (PDF em `artigo_final/build/artigo.pdf`), e é lá que se deve editar. As referências foram todas conferidas e estão em `artigo_final/referencias.bib`.
 
 ---
 
