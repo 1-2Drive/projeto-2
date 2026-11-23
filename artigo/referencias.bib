@@ -1,0 +1,682 @@
+% ---------------------------------------------------------------
+% referencias.bib
+%
+% Todas as entradas foram conferidas a 23 de novembro de 2026 numa página
+% com os dados bibliográficos (Crossref, arXiv, PMLR, NeurIPS, editora).
+% Com o estilo splncs04 só aparecem no PDF as entradas citadas no texto
+% (\cite), por isso o ficheiro tem mais do que as que o artigo usa.
+%
+% Notas:
+%  - Artigos IEEE/CVF têm duas paginações (IEEE e CVF); usa-se a do IEEE,
+%    que é a que corresponde ao DOI.
+%  - Entradas marcadas RESERVA têm os dados bibliográficos conferidos, mas
+%    o conteúdo não foi lido: ler antes de citar.
+% ---------------------------------------------------------------
+
+% ================= Dados e benchmarks ==========================
+
+@inproceedings{ettinger2021large,
+  author    = {Ettinger, Scott and Cheng, Shuyang and Caine, Benjamin and Liu, Chenxi and Zhao, Hang and Pradhan, Sabeek and Chai, Yuning and Sapp, Ben and Qi, Charles R. and Zhou, Yin and Yang, Zoey and Chouard, Aur{\'e}lien and Sun, Pei and Ngiam, Jiquan and Vasudevan, Vijay and McCauley, Alexander and Shlens, Jonathon and Anguelov, Dragomir},
+  title     = {Large Scale Interactive Motion Forecasting for Autonomous Driving: The {W}aymo {O}pen {M}otion {D}ataset},
+  booktitle = {2021 IEEE/CVF International Conference on Computer Vision (ICCV)},
+  pages     = {9690--9699},
+  publisher = {IEEE},
+  year      = {2021},
+  doi       = {10.1109/ICCV48922.2021.00957}
+}
+
+@inproceedings{chang2019argoverse,
+  author    = {Chang, Ming-Fang and Lambert, John and Sangkloy, Patsorn and Singh, Jagjeet and Bak, Slawomir and Hartnett, Andrew and Wang, De and Carr, Peter and Lucey, Simon and Ramanan, Deva and Hays, James},
+  title     = {Argoverse: {3D} Tracking and Forecasting With Rich Maps},
+  booktitle = {2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages     = {8740--8749},
+  publisher = {IEEE},
+  year      = {2019},
+  doi       = {10.1109/CVPR.2019.00895}
+}
+
+@inproceedings{caesar2020nuscenes,
+  author    = {Caesar, Holger and Bankiti, Varun and Lang, Alex H. and Vora, Sourabh and Liong, Venice Erin and Xu, Qiang and Krishnan, Anush and Pan, Yu and Baldan, Giancarlo and Beijbom, Oscar},
+  title     = {{nuScenes}: A Multimodal Dataset for Autonomous Driving},
+  booktitle = {2020 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages     = {11618--11628},
+  publisher = {IEEE},
+  year      = {2020},
+  doi       = {10.1109/CVPR42600.2020.01164}
+}
+
+@inproceedings{krajewski2018highd,
+  author    = {Krajewski, Robert and Bock, Julian and Kloeker, Laurent and Eckstein, Lutz},
+  title     = {The {highD} Dataset: A Drone Dataset of Naturalistic Vehicle Trajectories on {G}erman Highways for Validation of Highly Automated Driving Systems},
+  booktitle = {2018 21st International Conference on Intelligent Transportation Systems (ITSC)},
+  pages     = {2118--2125},
+  publisher = {IEEE},
+  year      = {2018},
+  doi       = {10.1109/ITSC.2018.8569552}
+}
+
+@article{yan2026improving,
+  author  = {Yan, Xintao and Liang, Erdao and Wang, Jiawei and Zhu, Haojie and Liu, Henry X.},
+  title   = {Improving traffic signal data quality for the {W}aymo {O}pen {M}otion {D}ataset},
+  journal = {Transportation Research Part C: Emerging Technologies},
+  volume  = {183},
+  pages   = {105476},
+  year    = {2026},
+  doi     = {10.1016/j.trc.2025.105476}
+}
+
+% ================= Previsão: revisões e modelos físicos ========
+
+@article{lefevre2014survey,
+  author  = {Lef{\`e}vre, St{\'e}phanie and Vasquez, Dizan and Laugier, Christian},
+  title   = {A survey on motion prediction and risk assessment for intelligent vehicles},
+  journal = {ROBOMECH Journal},
+  volume  = {1},
+  number  = {1},
+  pages   = {1},
+  year    = {2014},
+  doi     = {10.1186/s40648-014-0001-z}
+}
+
+@article{huang2022survey,
+  author  = {Huang, Yanjun and Du, Jiatong and Yang, Ziru and Zhou, Zewei and Zhang, Lin and Chen, Hong},
+  title   = {A Survey on Trajectory-Prediction Methods for Autonomous Driving},
+  journal = {IEEE Transactions on Intelligent Vehicles},
+  volume  = {7},
+  number  = {3},
+  pages   = {652--674},
+  year    = {2022},
+  doi     = {10.1109/TIV.2022.3167103}
+}
+
+@article{mozaffari2022deep,
+  author  = {Mozaffari, Sajjad and Al-Jarrah, Omar Y. and Dianati, Mehrdad and Jennings, Paul and Mouzakitis, Alexandros},
+  title   = {Deep Learning-Based Vehicle Behavior Prediction for Autonomous Driving Applications: A Review},
+  journal = {IEEE Transactions on Intelligent Transportation Systems},
+  volume  = {23},
+  number  = {1},
+  pages   = {33--47},
+  year    = {2022},
+  doi     = {10.1109/TITS.2020.3012034}
+}
+
+% DOI por confirmar (não foi encontrado no Crossref).
+@inproceedings{schubert2008comparison,
+  author    = {Schubert, Robin and Richter, Eric and Wanielik, Gerd},
+  title     = {Comparison and evaluation of advanced motion models for vehicle tracking},
+  booktitle = {11th International Conference on Information Fusion (FUSION)},
+  pages     = {1--6},
+  publisher = {IEEE},
+  year      = {2008}
+}
+
+% RESERVA
+@inproceedings{houenou2013vehicle,
+  author    = {Houenou, Adam and Bonnifait, Philippe and Cherfaoui, V{\'e}ronique and Yao, Wen},
+  title     = {Vehicle trajectory prediction based on motion model and maneuver recognition},
+  booktitle = {2013 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
+  pages     = {4363--4369},
+  publisher = {IEEE},
+  year      = {2013},
+  doi       = {10.1109/IROS.2013.6696982}
+}
+
+% ================= Previsão: referências simples fortes ========
+
+@article{scholler2020constant,
+  author  = {Sch{\"o}ller, Christoph and Aravantinos, Vincent and Lay, Florian and Knoll, Alois},
+  title   = {What the Constant Velocity Model Can Teach Us About Pedestrian Motion Prediction},
+  journal = {IEEE Robotics and Automation Letters},
+  volume  = {5},
+  number  = {2},
+  pages   = {1696--1703},
+  year    = {2020},
+  doi     = {10.1109/LRA.2020.2969925}
+}
+
+@inproceedings{munozsanchez2022scenario,
+  author    = {Mu{\~n}oz S{\'a}nchez, Manuel and Elfring, Jos and Silvas, Emilia and van de Molengraft, Ren{\'e}},
+  title     = {Scenario-based Evaluation of Prediction Models for Automated Vehicles},
+  booktitle = {25th IEEE International Conference on Intelligent Transportation Systems (ITSC)},
+  pages     = {2227--2233},
+  publisher = {IEEE},
+  year      = {2022},
+  doi       = {10.1109/ITSC55140.2022.9922603}
+}
+
+% Página final por confirmar (o registo do Crossref está mal formado).
+@inproceedings{deo2018convolutional,
+  author    = {Deo, Nachiket and Trivedi, Mohan M.},
+  title     = {Convolutional Social Pooling for Vehicle Trajectory Prediction},
+  booktitle = {2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW)},
+  pages     = {1549--1557},
+  publisher = {IEEE},
+  year      = {2018},
+  doi       = {10.1109/CVPRW.2018.00196}
+}
+
+% ================= Previsão: aprendizagem automática clássica ==
+
+@article{wirthmuller2021teaching,
+  author  = {Wirthm{\"u}ller, Florian and Schlechtriemen, Julian and Hipp, Jochen and Reichert, Manfred},
+  title   = {Teaching Vehicles to Anticipate: A Systematic Study on Probabilistic Behavior Prediction Using Large Data Sets},
+  journal = {IEEE Transactions on Intelligent Transportation Systems},
+  volume  = {22},
+  number  = {11},
+  pages   = {7129--7144},
+  year    = {2021},
+  doi     = {10.1109/TITS.2020.3002070}
+}
+
+@inproceedings{schlechtriemen2015when,
+  author    = {Schlechtriemen, Julian and Wirthmueller, Florian and Wedel, Andreas and Breuel, Gabi and Kuhnert, Klaus-Dieter},
+  title     = {When will it change the lane? {A} probabilistic regression approach for rarely occurring events},
+  booktitle = {2015 IEEE Intelligent Vehicles Symposium (IV)},
+  pages     = {1373--1379},
+  publisher = {IEEE},
+  year      = {2015},
+  doi       = {10.1109/IVS.2015.7225907}
+}
+
+@article{aoude2012driver,
+  author  = {Aoude, Georges S. and Desaraju, Vishnu R. and Stephens, Lauren H. and How, Jonathan P.},
+  title   = {Driver Behavior Classification at Intersections and Validation on Large Naturalistic Data Set},
+  journal = {IEEE Transactions on Intelligent Transportation Systems},
+  volume  = {13},
+  number  = {2},
+  pages   = {724--736},
+  year    = {2012},
+  doi     = {10.1109/TITS.2011.2179537}
+}
+
+% RESERVA (os modelos usados não foram confirmados no resumo)
+@article{deo2018how,
+  author  = {Deo, Nachiket and Rangesh, Akshay and Trivedi, Mohan M.},
+  title   = {How Would Surround Vehicles Move? {A} Unified Framework for Maneuver Classification and Motion Prediction},
+  journal = {IEEE Transactions on Intelligent Vehicles},
+  volume  = {3},
+  number  = {2},
+  pages   = {129--140},
+  year    = {2018},
+  doi     = {10.1109/TIV.2018.2804159}
+}
+
+% RESERVA (nomes como estão no Crossref, sem acentos)
+@inproceedings{wiest2012probabilistic,
+  author    = {Wiest, Jurgen and Hoffken, Matthias and Kresel, Ulrich and Dietmayer, Klaus},
+  title     = {Probabilistic trajectory prediction with {G}aussian mixture models},
+  booktitle = {2012 IEEE Intelligent Vehicles Symposium (IV)},
+  pages     = {141--146},
+  publisher = {IEEE},
+  year      = {2012},
+  doi       = {10.1109/IVS.2012.6232277}
+}
+
+@article{schumann2023benchmarking,
+  author  = {Schumann, Julian F. and Kober, Jens and Zgonnikov, Arkady},
+  title   = {Benchmarking Behavior Prediction Models in Gap Acceptance Scenarios},
+  journal = {IEEE Transactions on Intelligent Vehicles},
+  volume  = {8},
+  number  = {3},
+  pages   = {2580--2591},
+  year    = {2023},
+  doi     = {10.1109/TIV.2023.3244280}
+}
+
+@article{breiman2001random,
+  author  = {Breiman, Leo},
+  title   = {Random Forests},
+  journal = {Machine Learning},
+  volume  = {45},
+  number  = {1},
+  pages   = {5--32},
+  year    = {2001},
+  doi     = {10.1023/A:1010933404324}
+}
+
+@article{friedman2001greedy,
+  author  = {Friedman, Jerome H.},
+  title   = {Greedy function approximation: A gradient boosting machine},
+  journal = {The Annals of Statistics},
+  volume  = {29},
+  number  = {5},
+  pages   = {1189--1232},
+  year    = {2001},
+  doi     = {10.1214/aos/1013203451}
+}
+
+@article{cortes1995support,
+  author  = {Cortes, Corinna and Vapnik, Vladimir},
+  title   = {Support-vector networks},
+  journal = {Machine Learning},
+  volume  = {20},
+  number  = {3},
+  pages   = {273--297},
+  year    = {1995},
+  doi     = {10.1007/BF00994018}
+}
+
+@article{cover1967nearest,
+  author  = {Cover, Thomas M. and Hart, Peter E.},
+  title   = {Nearest neighbor pattern classification},
+  journal = {IEEE Transactions on Information Theory},
+  volume  = {13},
+  number  = {1},
+  pages   = {21--27},
+  year    = {1967},
+  doi     = {10.1109/TIT.1967.1053964}
+}
+
+@article{pedregosa2011scikit,
+  author  = {Pedregosa, Fabian and Varoquaux, Ga{\"e}l and Gramfort, Alexandre and Michel, Vincent and Thirion, Bertrand and Grisel, Olivier and Blondel, Mathieu and Prettenhofer, Peter and Weiss, Ron and Dubourg, Vincent and Vanderplas, Jake and Passos, Alexandre and Cournapeau, David and Brucher, Matthieu and Perrot, Matthieu and Duchesnay, {\'E}douard},
+  title   = {Scikit-learn: Machine Learning in {P}ython},
+  journal = {Journal of Machine Learning Research},
+  volume  = {12},
+  pages   = {2825--2830},
+  year    = {2011},
+  url     = {https://www.jmlr.org/papers/v12/pedregosa11a.html}
+}
+
+% ================= Previsão: aprendizagem profunda =============
+
+@inproceedings{alahi2016social,
+  author    = {Alahi, Alexandre and Goel, Kratarth and Ramanathan, Vignesh and Robicquet, Alexandre and Fei-Fei, Li and Savarese, Silvio},
+  title     = {Social {LSTM}: Human Trajectory Prediction in Crowded Spaces},
+  booktitle = {2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages     = {961--971},
+  publisher = {IEEE},
+  year      = {2016},
+  doi       = {10.1109/CVPR.2016.110}
+}
+
+@inproceedings{gao2020vectornet,
+  author    = {Gao, Jiyang and Sun, Chen and Zhao, Hang and Shen, Yi and Anguelov, Dragomir and Li, Congcong and Schmid, Cordelia},
+  title     = {{VectorNet}: Encoding {HD} Maps and Agent Dynamics From Vectorized Representation},
+  booktitle = {2020 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages     = {11522--11530},
+  publisher = {IEEE},
+  year      = {2020},
+  doi       = {10.1109/CVPR42600.2020.01154}
+}
+
+@inproceedings{chai2020multipath,
+  author    = {Chai, Yuning and Sapp, Benjamin and Bansal, Mayank and Anguelov, Dragomir},
+  title     = {{MultiPath}: Multiple Probabilistic Anchor Trajectory Hypotheses for Behavior Prediction},
+  booktitle = {Proceedings of the Conference on Robot Learning (CoRL 2019)},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {100},
+  pages     = {86--99},
+  publisher = {PMLR},
+  year      = {2020},
+  url       = {https://proceedings.mlr.press/v100/chai20a.html}
+}
+
+@inproceedings{salzmann2020trajectron,
+  author    = {Salzmann, Tim and Ivanovic, Boris and Chakravarty, Punarjay and Pavone, Marco},
+  title     = {Trajectron++: Dynamically-Feasible Trajectory Forecasting with Heterogeneous Data},
+  booktitle = {Computer Vision -- ECCV 2020},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {12363},
+  pages     = {683--700},
+  publisher = {Springer},
+  address   = {Cham},
+  year      = {2020},
+  doi       = {10.1007/978-3-030-58523-5_40}
+}
+
+@inproceedings{nayakanti2023wayformer,
+  author    = {Nayakanti, Nigamaa and Al-Rfou, Rami and Zhou, Aurick and Goel, Kratarth and Refaat, Khaled S. and Sapp, Benjamin},
+  title     = {Wayformer: Motion Forecasting via Simple \& Efficient Attention Networks},
+  booktitle = {2023 IEEE International Conference on Robotics and Automation (ICRA)},
+  pages     = {2980--2987},
+  publisher = {IEEE},
+  year      = {2023},
+  doi       = {10.1109/ICRA48891.2023.10160609}
+}
+
+@inproceedings{shi2022motion,
+  author    = {Shi, Shaoshuai and Jiang, Li and Dai, Dengxin and Schiele, Bernt},
+  title     = {Motion Transformer with Global Intention Localization and Local Movement Refinement},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {35},
+  pages     = {6531--6543},
+  year      = {2022},
+  url       = {https://papers.neurips.cc/paper_files/paper/2022/hash/2ab47c960bfee4f86dfc362f26ad066a-Abstract-Conference.html}
+}
+
+% ================= Previsão: referencial do agente e resíduos ==
+
+@article{bahari2021injecting,
+  author  = {Bahari, Mohammadhossein and Nejjar, Ismail and Alahi, Alexandre},
+  title   = {Injecting knowledge in data-driven vehicle trajectory predictors},
+  journal = {Transportation Research Part C: Emerging Technologies},
+  volume  = {128},
+  pages   = {103010},
+  year    = {2021},
+  doi     = {10.1016/j.trc.2021.103010}
+}
+
+@article{long2025physical,
+  author  = {Long, Keke and Sheng, Zihao and Shi, Haotian and Li, Xiaopeng and Chen, Sikai and Ahn, Soyoung},
+  title   = {Physical enhanced residual learning ({PERL}) framework for vehicle trajectory prediction},
+  journal = {Communications in Transportation Research},
+  volume  = {5},
+  pages   = {100166},
+  year    = {2025},
+  doi     = {10.1016/j.commtr.2025.100166}
+}
+
+@inproceedings{su2022narrowing,
+  author    = {Su, DiJia Andy and Douillard, Bertrand and Al-Rfou, Rami and Park, Cheol and Sapp, Benjamin},
+  title     = {Narrowing the coordinate-frame gap in behavior prediction models: Distillation for efficient and accurate scene-centric motion forecasting},
+  booktitle = {2022 International Conference on Robotics and Automation (ICRA)},
+  pages     = {653--659},
+  publisher = {IEEE},
+  year      = {2022},
+  doi       = {10.1109/ICRA46639.2022.9812368}
+}
+
+% ================= Planeamento: revisões =======================
+
+@article{paden2016survey,
+  author  = {Paden, Brian and {\v{C}}{\'a}p, Michal and Yong, Sze Zheng and Yershov, Dmitry and Frazzoli, Emilio},
+  title   = {A Survey of Motion Planning and Control Techniques for Self-Driving Urban Vehicles},
+  journal = {IEEE Transactions on Intelligent Vehicles},
+  volume  = {1},
+  number  = {1},
+  pages   = {33--55},
+  year    = {2016},
+  doi     = {10.1109/TIV.2016.2578706}
+}
+
+@article{gonzalez2016review,
+  author  = {Gonz{\'a}lez, David and P{\'e}rez, Joshu{\'e} and Milan{\'e}s, Vicente and Nashashibi, Fawzi},
+  title   = {A Review of Motion Planning Techniques for Automated Vehicles},
+  journal = {IEEE Transactions on Intelligent Transportation Systems},
+  volume  = {17},
+  number  = {4},
+  pages   = {1135--1145},
+  year    = {2016},
+  doi     = {10.1109/TITS.2015.2498841}
+}
+
+@article{schwarting2018planning,
+  author  = {Schwarting, Wilko and Alonso-Mora, Javier and Rus, Daniela},
+  title   = {Planning and Decision-Making for Autonomous Vehicles},
+  journal = {Annual Review of Control, Robotics, and Autonomous Systems},
+  volume  = {1},
+  pages   = {187--210},
+  year    = {2018},
+  doi     = {10.1146/annurev-control-060117-105157}
+}
+
+@article{claussmann2020review,
+  author  = {Claussmann, Laurene and Revilloud, Marc and Gruyer, Dominique and Glaser, S{\'e}bastien},
+  title   = {A Review of Motion Planning for Highway Autonomous Driving},
+  journal = {IEEE Transactions on Intelligent Transportation Systems},
+  volume  = {21},
+  number  = {5},
+  pages   = {1826--1848},
+  year    = {2020},
+  doi     = {10.1109/TITS.2019.2913998}
+}
+
+% ================= Planeamento: pesquisa em grafos =============
+
+@article{hart1968formal,
+  author  = {Hart, Peter E. and Nilsson, Nils J. and Raphael, Bertram},
+  title   = {A Formal Basis for the Heuristic Determination of Minimum Cost Paths},
+  journal = {IEEE Transactions on Systems Science and Cybernetics},
+  volume  = {4},
+  number  = {2},
+  pages   = {100--107},
+  year    = {1968},
+  doi     = {10.1109/TSSC.1968.300136}
+}
+
+@inproceedings{ajanovic2018search,
+  author    = {Ajanovic, Zlatan and Lacevic, Bakir and Shyrokau, Barys and Stolz, Michael and Horn, Martin},
+  title     = {Search-Based Optimal Motion Planning for Automated Driving},
+  booktitle = {2018 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
+  pages     = {4523--4530},
+  publisher = {IEEE},
+  year      = {2018},
+  doi       = {10.1109/IROS.2018.8593813}
+}
+
+@inproceedings{hubmann2016generic,
+  author    = {Hubmann, Constantin and Aeberhard, Michael and Stiller, Christoph},
+  title     = {A Generic Driving Strategy for Urban Environments},
+  booktitle = {2016 IEEE 19th International Conference on Intelligent Transportation Systems (ITSC)},
+  pages     = {1010--1016},
+  publisher = {IEEE},
+  year      = {2016},
+  doi       = {10.1109/ITSC.2016.7795679}
+}
+
+@article{dolgov2010path,
+  author  = {Dolgov, Dmitri and Thrun, Sebastian and Montemerlo, Michael and Diebel, James},
+  title   = {Path Planning for Autonomous Vehicles in Unknown Semi-structured Environments},
+  journal = {The International Journal of Robotics Research},
+  volume  = {29},
+  number  = {5},
+  pages   = {485--501},
+  year    = {2010},
+  doi     = {10.1177/0278364909359210}
+}
+
+@inproceedings{ziegler2009spatiotemporal,
+  author    = {Ziegler, Julius and Stiller, Christoph},
+  title     = {Spatiotemporal State Lattices for Fast Trajectory Planning in Dynamic On-Road Driving Scenarios},
+  booktitle = {2009 IEEE/RSJ International Conference on Intelligent Robots and Systems},
+  pages     = {1879--1884},
+  publisher = {IEEE},
+  year      = {2009},
+  doi       = {10.1109/IROS.2009.5354448}
+}
+
+% RESERVA
+@inproceedings{mcnaughton2011motion,
+  author    = {McNaughton, Matthew and Urmson, Chris and Dolan, John M. and Lee, Jin-Woo},
+  title     = {Motion Planning for Autonomous Driving with a Conformal Spatiotemporal Lattice},
+  booktitle = {2011 IEEE International Conference on Robotics and Automation},
+  pages     = {4889--4895},
+  publisher = {IEEE},
+  year      = {2011},
+  doi       = {10.1109/ICRA.2011.5980223}
+}
+
+% ================= Planeamento: caminho-velocidade, Frenet =====
+
+@article{kant1986toward,
+  author  = {Kant, Kamal and Zucker, Steven W.},
+  title   = {Toward Efficient Trajectory Planning: The Path-Velocity Decomposition},
+  journal = {The International Journal of Robotics Research},
+  volume  = {5},
+  number  = {3},
+  pages   = {72--89},
+  year    = {1986},
+  doi     = {10.1177/027836498600500304}
+}
+
+@inproceedings{werling2010optimal,
+  author    = {Werling, Moritz and Ziegler, Julius and Kammel, S{\"o}ren and Thrun, Sebastian},
+  title     = {Optimal Trajectory Generation for Dynamic Street Scenarios in a {F}ren{\'e}t Frame},
+  booktitle = {2010 IEEE International Conference on Robotics and Automation (ICRA)},
+  pages     = {987--993},
+  publisher = {IEEE},
+  year      = {2010},
+  doi       = {10.1109/ROBOT.2010.5509799}
+}
+
+@misc{fan2018baidu,
+  author       = {Fan, Haoyang and Zhu, Fan and Liu, Changchun and Zhang, Liangliang and Zhuang, Li and Li, Dong and Zhu, Weicheng and Hu, Jiangtao and Li, Hongye and Kong, Qi},
+  title        = {Baidu {A}pollo {EM} Motion Planner},
+  howpublished = {arXiv:1807.08048},
+  year         = {2018}
+}
+
+% RESERVA
+@inproceedings{johnson2012optimal,
+  author    = {Johnson, Jeff and Hauser, Kris},
+  title     = {Optimal Acceleration-Bounded Trajectory Planning in Dynamic Environments Along a Specified Path},
+  booktitle = {2012 IEEE International Conference on Robotics and Automation},
+  pages     = {2035--2041},
+  publisher = {IEEE},
+  year      = {2012},
+  doi       = {10.1109/ICRA.2012.6225233}
+}
+
+% ================= Planeamento: outras famílias ================
+
+@article{karaman2011sampling,
+  author  = {Karaman, Sertac and Frazzoli, Emilio},
+  title   = {Sampling-based Algorithms for Optimal Motion Planning},
+  journal = {The International Journal of Robotics Research},
+  volume  = {30},
+  number  = {7},
+  pages   = {846--894},
+  year    = {2011},
+  doi     = {10.1177/0278364911406761}
+}
+
+@article{treiber2000congested,
+  author  = {Treiber, Martin and Hennecke, Ansgar and Helbing, Dirk},
+  title   = {Congested traffic states in empirical observations and microscopic simulations},
+  journal = {Physical Review E},
+  volume  = {62},
+  number  = {2},
+  pages   = {1805--1824},
+  year    = {2000},
+  doi     = {10.1103/PhysRevE.62.1805}
+}
+
+@misc{shalevshwartz2017formal,
+  author       = {Shalev-Shwartz, Shai and Shammah, Shaked and Shashua, Amnon},
+  title        = {On a Formal Model of Safe and Scalable Self-driving Cars},
+  howpublished = {arXiv:1708.06374},
+  year         = {2017}
+}
+
+% RESERVA
+@article{falcone2007predictive,
+  author  = {Falcone, Paolo and Borrelli, Francesco and Asgari, Jahan and Tseng, Hongtei Eric and Hrovat, Davor},
+  title   = {Predictive Active Steering Control for Autonomous Vehicle Systems},
+  journal = {IEEE Transactions on Control Systems Technology},
+  volume  = {15},
+  number  = {3},
+  pages   = {566--580},
+  year    = {2007},
+  doi     = {10.1109/TCST.2007.894653}
+}
+
+% ================= Ligação previsão-planeamento ================
+
+@inproceedings{dauner2023parting,
+  author    = {Dauner, Daniel and Hallgarten, Marcel and Geiger, Andreas and Chitta, Kashyap},
+  title     = {Parting with Misconceptions about Learning-based Vehicle Motion Planning},
+  booktitle = {Proceedings of The 7th Conference on Robot Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {229},
+  pages     = {1268--1281},
+  publisher = {PMLR},
+  year      = {2023},
+  url       = {https://proceedings.mlr.press/v229/dauner23a.html}
+}
+
+% O NeurIPS escreve o primeiro autor «Tran Phong» e o arXiv «Phong Tran»:
+% conferir no BibTeX oficial do NeurIPS antes da versão final.
+@inproceedings{tran2023what,
+  author    = {Tran, Phong and Wu, Haoran and Yu, Cunjun and Cai, Panpan and Zheng, Sifa and Hsu, David},
+  title     = {What Truly Matters in Trajectory Prediction for Autonomous Driving?},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {36},
+  pages     = {71327--71339},
+  year      = {2023},
+  url       = {https://proceedings.neurips.cc/paper_files/paper/2023/hash/e197fe307eb3467035f892dc100d570a-Abstract-Conference.html}
+}
+
+@article{hagedorn2025integration,
+  author  = {Hagedorn, Steffen and Hallgarten, Marcel and Stoll, Martin and Condurache, Alexandru Paul},
+  title   = {The Integration of Prediction and Planning in Deep Learning Automated Driving Systems: A Review},
+  journal = {IEEE Transactions on Intelligent Vehicles},
+  volume  = {10},
+  number  = {5},
+  pages   = {3626--3643},
+  year    = {2025},
+  doi     = {10.1109/TIV.2024.3459071}
+}
+
+@inproceedings{ivanovic2022injecting,
+  author    = {Ivanovic, Boris and Pavone, Marco},
+  title     = {Injecting Planning-Awareness into Prediction and Detection Evaluation},
+  booktitle = {2022 IEEE Intelligent Vehicles Symposium (IV)},
+  pages     = {821--828},
+  publisher = {IEEE},
+  year      = {2022},
+  doi       = {10.1109/IV51971.2022.9827101}
+}
+
+@inproceedings{sadigh2016planning,
+  author    = {Sadigh, Dorsa and Sastry, Shankar and Seshia, Sanjit A. and Dragan, Anca D.},
+  title     = {Planning for Autonomous Cars that Leverage Effects on Human Actions},
+  booktitle = {Proceedings of Robotics: Science and Systems XII},
+  address   = {Ann Arbor, Michigan},
+  year      = {2016},
+  doi       = {10.15607/RSS.2016.XII.029}
+}
+
+% ================= Avaliação de planeadores ====================
+
+@inproceedings{karnchanachari2024towards,
+  author    = {Karnchanachari, Napat and Geromichalos, Dimitris and Tan, Kok Seang and Li, Nanxiang and Eriksen, Christopher and Yaghoubi, Shakiba and Mehdipour, Noushin and Bernasconi, Gianmarco and Fong, Whye Kit and Guo, Yiluan and Caesar, Holger},
+  title     = {Towards learning-based planning: The {nuPlan} benchmark for real-world autonomous driving},
+  booktitle = {2024 IEEE International Conference on Robotics and Automation (ICRA)},
+  pages     = {629--636},
+  publisher = {IEEE},
+  year      = {2024},
+  doi       = {10.1109/ICRA57147.2024.10610077}
+}
+
+@inproceedings{gulino2023waymax,
+  author    = {Gulino, Cole and Fu, Justin and Luo, Wenjie and Tucker, George and Bronstein, Eli and Lu, Yiren and Harb, Jean and Pan, Xinlei and Wang, Yan and Chen, Xiangyu and Co-Reyes, John and Agarwal, Rishabh and Roelofs, Rebecca and Lu, Yao and Montali, Nico and Mougin, Paul and Yang, Zoey and White, Brandyn and Faust, Aleksandra and McAllister, Rowan and Anguelov, Dragomir and Sapp, Benjamin},
+  title     = {Waymax: An Accelerated, Data-Driven Simulator for Large-Scale Autonomous Driving Research},
+  booktitle = {Advances in Neural Information Processing Systems (Datasets and Benchmarks Track)},
+  volume    = {36},
+  pages     = {7730--7742},
+  year      = {2023},
+  url       = {https://proceedings.neurips.cc/paper_files/paper/2023/hash/1838feeb71c4b4ea524d0df2f7074245-Abstract-Datasets_and_Benchmarks.html}
+}
+
+@inproceedings{althoff2017commonroad,
+  author    = {Althoff, Matthias and Koschi, Markus and Manzinger, Stefanie},
+  title     = {{CommonRoad}: Composable Benchmarks for Motion Planning on Roads},
+  booktitle = {2017 IEEE Intelligent Vehicles Symposium (IV)},
+  pages     = {719--726},
+  publisher = {IEEE},
+  year      = {2017},
+  doi       = {10.1109/IVS.2017.7995802}
+}
+
+% Volume da série LNCS por confirmar.
+@inproceedings{codevilla2018offline,
+  author    = {Codevilla, Felipe and L{\'o}pez, Antonio M. and Koltun, Vladlen and Dosovitskiy, Alexey},
+  title     = {On Offline Evaluation of Vision-based Driving Models},
+  booktitle = {Computer Vision -- ECCV 2018},
+  series    = {Lecture Notes in Computer Science},
+  pages     = {246--262},
+  publisher = {Springer},
+  year      = {2018},
+  doi       = {10.1007/978-3-030-01267-0_15}
+}
+
+@article{westhofen2023criticality,
+  author  = {Westhofen, Lukas and Neurohr, Christian and Koopmann, Tjark and Butz, Martin and Sch{\"u}tt, Barbara and Utesch, Fabian and Neurohr, Birte and Gutenkunst, Christian and B{\"o}de, Eckard},
+  title   = {Criticality Metrics for Automated Driving: A Review and Suitability Analysis of the State of the Art},
+  journal = {Archives of Computational Methods in Engineering},
+  volume  = {30},
+  number  = {1},
+  pages   = {1--35},
+  year    = {2023},
+  doi     = {10.1007/s11831-022-09788-7}
+}
