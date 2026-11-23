@@ -60,28 +60,49 @@ No domínio do planeamento tático, destacam-se:
 
 ---
 
-## 3. Metodologia: A Arquitetura "Prever para Planear"
+## 3. Metodologia
+O desenvolvimento do sistema Prever para Planear adotou a metodologia ágil Scrum aliada ao processo padronizado CRISP-DM para fluxos de aprendizagem automática, estruturando as atividades em sprints iterativos de engenharia de dados, modelação preditiva e planeamento espaço-temporal.
 
-A arquitetura implementada no repositório `1-2Drive/projeto-2` é composta por três módulos modulares:
+### 3.1 Requisitos Funcionais (Formato User Story)
+1. **US-01: Ingestão de Trajetórias e Contratos de Dados.** Como sistema de condução autónoma, pretendo ingerir cenários brutos do Waymo Open Motion Dataset e impor contratos formais de colunas que separem metadados, coordenadas globais e atributos cinemáticos.  
+   *Critérios de Aceitação:* Cenários de 20 segundos a 10~Hz são convertidos em DataFrames estruturados; metadados e coordenadas globais são estritamente isolados do vetor de características $X$ para garantir invariância espacial e prevenir sobreajuste geográfico.
+2. **US-02: Engenharia de Características Vetorizada em NumPy e Pandas.** Como módulo de pré-processamento, pretendo calcular cinemática ego-relativa, velocidade de aproximação (*closing speed*) e Time-To-Collision (TTC) através de operações estritamente vetorizadas.  
+   *Critérios de Aceitação:* O pipeline utiliza exclusivamente operações matriciais NumPy e indexação booleana Pandas sem ciclos `for` em Python; amostras com velocidades ou posições fisicamente inválidas são descartadas por filtragem booleana.
+3. **US-03: Previsão de Trajetória Multi-Horizonte e Classificação de Intenção.** Como sistema preditivo de decisão, pretendo antecipar deslocamentos espaciais futuros ($\Delta x, \Delta y$ a 1.0s, 3.0s e 5.0s) e classificar manobras táticas para todos os obstáculos dinâmicos circundantes.  
+   *Critérios de Aceitação:* Os modelos de regressão superam baselines físicas (Constant Velocity e Constant Acceleration) em métricas ADE e FDE; o classificador de manobras alcança acurácia $>75\%$ nas 5 classes de manobras táticas.
+4. **US-04: Planeamento Espaço-Temporal em Malha Fechada Livre de Colisões.** Como módulo de planeamento de velocidade e trajetória, pretendo gerar um perfil ótimo de velocidade $(s, v, t)$ ao longo da linha central da faixa em coordenadas de Frenet que desvie proativamente dos obstáculos previstos.  
+   *Critérios de Aceitação:* O planeador A* avalia footprints dinâmicos de múltiplos obstáculos simultâneos, elimina desacelerações de emergência ($a \le -3.0\text{ m/s}^2$) e reduz a taxa de colisão face a planeadores não-preditivos de velocidade constante.
+
+### 3.2 Requisitos Não-Funcionais
+1. **RNF-01: Orçamento de Latência em Tempo Real.** O ciclo integrado de predição e planeamento deve executar dentro de um teto rígido de 50 a 100~ms (ciclo de controlo de 10 a 20~Hz) em CPUs convencionais de grau automóvel sem necessidade de aceleradores GPU.
+2. **RNF-02: Prevenção Estrita de Fuga Temporal de Dados (*Zero Data Leakage*).** A partição do dataset deve ser rigorosamente baseada em grupos de cenários independentes (`scenario_id`), garantindo que $\mathcal{S}_{train} \cap \mathcal{S}_{val} = \emptyset$ e $\mathcal{S}_{train} \cap \mathcal{S}_{test} = \emptyset$.
+3. **RNF-03: Segurança Funcional e Explicabilidade (Norma ISO 26262).** Os modelos preditivos de ML devem fornecer fronteiras de decisão inspecionáveis e quantificação de importância de variáveis (*Gini Importance*) para auditoria de segurança.
+4. **RNF-04: Tempo Determinístico de Pior Caso (WCET).** O algoritmo de pesquisa espaço-temporal deve possuir um limite fixo de expansões de nós (`max_expansions`) para prevenir bloqueios computacionais em tempo de execução.
+
+---
+
+## 4. Solução Proposta: Arquitetura "Prever para Planear"
+
+A arquitetura implementada no repositório `1-2Drive/projeto-2` é composta por quatro módulos integrados:
 
 ```
 [Waymo TFRecord Shards]
           │
           ▼ (Streaming & Decodificação Protobuf)
-[SequenceExtractor] ──► Filtros: Distância < 50m, Velocidade > 1.0 m/s, Validade Contínua
+[SequenceExtractor / Pipeline Pandas] ──► Contratos Formais: Metadados, Globais, Relativas, Targets
           │
           ▼
-[ML Trajectory Predictor] ──► Features: Cinética Relativa, Histórico 1.0s
-   (CV vs CA vs Decision Tree vs Random Forest)
-          │ Predições: Δx, Δy em t+1.0s, t+3.0s, t+5.0s
+[ML Trajectory & Maneuver Predictor] ──► Regressão Multi-Horizonte (1s, 3s, 5s) & Classificação 5 Classes
+   (CV vs CA vs Decision Tree vs Random Forest vs HistGradientBoosting)
+          │ Predições: Δx, Δy & Intenção Tática
           ▼
-[Spatiotemporal A* Planner] ──► Evasão no plano (s, v, t) ao longo da faixa
+[Spatiotemporal A* Speed Planner] ──► Evasão no reticulado (s, v, t) ao longo da faixa (Frenet)
           │
           ▼
-[Métricas em Malha Fechada]: Colisão %, TTC Mínimo, Desacelerações de Emergência
+[Métricas em Malha Fechada]: Taxa de Colisão %, Distância Mínima, Desacelerações de Emergência
 ```
 
-### 3.1 Engenharia de Características (Feature Engineering com Pandas & NumPy)
+### 4.1 Engenharia de Características (Feature Engineering com Pandas & NumPy)
 Para cada veículo alvo $i$ no instante $t$, as variáveis são transformadas de forma vetorizada com **NumPy** e **Pandas** para o referencial local do veículo ego:
 - Posição e gaps relativos: $x_{rel}, y_{rel}$, `longitudinal_gap`, `lateral_gap`
 - Cinemática de aproximação: `closing_speed`, `ttc` (Time-To-Collision vetorial), `azimuth_angle`
@@ -89,7 +110,16 @@ Para cada veículo alvo $i$ no instante $t$, as variáveis são transformadas de
 - Histórico cinemático (janela de 10 passos = 1.0s): $\Delta x_{past}, \Delta y_{past}, \bar{v}_{past}, \Delta \theta_{past}$.
 - Rotulagem vetorial de manobras (*np.select*): `STRAIGHT`, `TURN_LEFT`, `TURN_RIGHT`, `DECELERATING`, `ACCELERATING`.
 
-### 3.2 Justificação e Análise Empírica das Partições de Dados (Train / Val / Test)
+### 4.2 Formulação do Planeador A* Espaço-Temporal
+Discretização em estados $\mathbf{x}_k = (s_k, v_k, t_k)$ com transição de aceleração $a_k \in \{-3.0, -1.5, 0.0, 1.5\} \text{ m/s}^2$ e custo multiobjetivo:
+$$g(\mathbf{x}_{k+1}) = g(\mathbf{x}_k) + \left[ w_{comfort} a_k^2 + \mathcal{C}_{collision}(\mathbf{x}_{k+1}) \right] \Delta t$$
+onde a penalização de colisão é ativada sempre que a distância entre o ego e qualquer obstáculo dinâmico previsto é inferior ao raio de segurança $R_{safety} = 3.5$~m.
+
+---
+
+## 5. Avaliação Experimental
+
+### 5.1 Justificação e Análise Empírica das Partições de Dados (Train / Val / Test)
 A determinação da proporção de divisão entre os conjuntos de Treino, Validação e Teste é crítica para assegurar poder estatístico suficiente para aprendizagem sem comprometer a representatividade da avaliação. No Waymo Open Motion Dataset, devido à forte correlação temporal entre passos sucessivos de um mesmo episódio de 20 segundos, a partição é estritamente realizada por cenários únicos (`scenario_id`), garantindo **zero fuga de dados** (*zero data leakage*).
 
 Para justificar a escolha da partição, realizámos uma análise comparativa sistemática sobre 178 cenários (6.142 amostras interativas) sob diferentes rácios:

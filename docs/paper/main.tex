@@ -130,11 +130,36 @@ The architectural selection of tree-based ensembles (Random Forest, HistGradient
 %
 %
 %
-\section{Methodology and Data Pipeline}
+\section{Methodology}
 \label{sec:methodology}
+The development of the Predict-to-Plan architecture adhered to an agile, iterative engineering methodology based on Scrum~\cite{sutherland2020scrum} coupled with the CRISP-DM standard for machine learning workflows. Development was structured across targeted sprints covering data ingestion, feature engineering, predictive modeling, and spatiotemporal planning integration.
 
-\subsection{System Architecture}
-The overall Predict-to-Plan pipeline is illustrated in Fig.~\ref{fig:architecture}. It comprises four cohesive stages: (1) Scenario Ingestion from Waymo TFRecords, (2) Vectorized Data Cleaning and Feature Engineering (NumPy \& Pandas), (3) Machine Learning Motion and Intention Forecasting, and (4) Spatiotemporal $A^*$ Speed Planning.
+\subsection{Functional Requirements}
+The functional requirements of the Predict-to-Plan system are formulated below in standard User Story format with explicit acceptance criteria:
+\begin{enumerate}
+    \item \textbf{US-01: Multi-Agent Trajectory Ingestion and Contract Enforcement.} As an autonomous vehicle software pipeline, I want to ingest raw Waymo motion scenarios and enforce strict column contracts separating metadata, global coordinates, and kinematic features. \textit{Acceptance Criteria:} Raw 20-second scenarios at 10~Hz are parsed into structured tables; metadata and global spatial coordinates are strictly isolated from model training inputs to guarantee coordinate invariance.
+    \item \textbf{US-02: Vectorized Feature Extraction with NumPy and Pandas.} As a feature engineering module, I want to compute ego-relative kinematics, line-of-sight closing speeds, and Time-To-Collision (TTC) using pure vectorized operations. \textit{Acceptance Criteria:} Processing execution utilizes NumPy vectorization and Pandas boolean indexing without explicit Python \texttt{for}-loops over rows; invalid records outside realistic physical bounds are filtered out.
+    \item \textbf{US-03: Multi-Horizon Motion and Tactical Intent Forecasting.} As an autonomous decision system, I want to forecast future spatial displacements ($\Delta x, \Delta y$ at 1.0s, 3.0s, 5.0s) and classify tactical maneuvers for surrounding dynamic obstacles. \textit{Acceptance Criteria:} Multi-output regression achieves lower ADE/FDE than physics baselines; intention classification attains $>75\%$ accuracy across 5 discrete maneuver classes.
+    \item \textbf{US-04: Closed-Loop Spatiotemporal Collision-Free Planning.} As a path and speed planner, I want to compute an optimal speed profile $(s, v, t)$ along the Frenet centerline that proactively avoids predicted obstacle trajectories. \textit{Acceptance Criteria:} The $A^*$ planner evaluates multi-obstacle dynamic occupancy footprints, guarantees zero emergency braking decelerations ($a \le -3.0\text{ m/s}^2$), and achieves lower collision rates than non-predictive Constant Velocity baselines.
+\end{enumerate}
+
+\subsection{Non-Functional Requirements}
+The operational deployment of the autonomous system mandates four critical non-functional requirements:
+\begin{enumerate}
+    \item \textbf{NFR-01: Real-Time Latency Budget.} The complete forecasting and planning cycle must execute within a strict $50$--$100$~ms window ($10$--$20$~Hz control loop) on standard automotive CPUs without mandatory GPU hardware acceleration.
+    \item \textbf{NFR-02: Zero Temporal Data Leakage.} Dataset partitioning must be strictly group-aware based on independent \texttt{scenario\_id} keys ($\mathcal{S}_{train} \cap \mathcal{S}_{val} = \emptyset, \mathcal{S}_{train} \cap \mathcal{S}_{test} = \emptyset$), preventing auto-correlation contamination across consecutive frames.
+    \item \textbf{NFR-03: Functional Safety and Explainability (ISO 26262).} Machine learning components must provide verifiable decision boundaries and quantitative feature importance metrics (e.g., Gini importance) to satisfy functional safety auditing requirements.
+    \item \textbf{NFR-04: Deterministic Worst-Case Execution Time (WCET).} The spatiotemporal search planner must feature bounded state exploration with a deterministic maximum expansion ceiling (\texttt{max\_expansions}) to avoid cycle overruns.
+\end{enumerate}
+
+%
+%
+%
+\section{Proposed Solution: The Predict-to-Plan Architecture}
+\label{sec:solution}
+
+\subsection{System Architecture Overview}
+The overall Predict-to-Plan pipeline is illustrated in Fig.~\ref{fig:architecture}. It comprises four cohesive functional stages: (1) Scenario Ingestion from Waymo TFRecords, (2) Vectorized Data Cleaning and Feature Engineering (NumPy \& Pandas), (3) Machine Learning Motion and Intention Forecasting (AAUTIA), and (4) Spatiotemporal $A^*$ Speed Planning (PLNTDIA).
 
 \begin{figure}[t]
 \centering
@@ -143,8 +168,8 @@ The overall Predict-to-Plan pipeline is illustrated in Fig.~\ref{fig:architectur
 \label{fig:architecture}
 \end{figure}
 
-\subsection{Vectorized Data Preprocessing with NumPy and Pandas}
-A fundamental pedagogical and practical requirement of this project was the strict adoption of vectorized operations in **NumPy** and **Pandas** to process large-scale trajectory data efficiently without Python iteration bottlenecks.
+\subsection{Vectorized Data Preprocessing and Feature Contracts}
+A core pedagogical and engineering requirement of this project was the strict adoption of vectorized operations in \textbf{NumPy} and \textbf{Pandas} to process large-scale trajectory data efficiently without Python iteration bottlenecks.
 
 \subsubsection{Data Hygiene and Feature Contracts:}
 To ensure scientific rigor, we formalized four explicit column subsets:
@@ -174,39 +199,6 @@ v_{closing} = -\frac{\vec{r}_{rel} \cdot \vec{v}_{rel}}{\max(\|\vec{r}_{rel}\|, 
 99.0 & \text{otherwise} 
 \end{cases}
 \end{equation}
-
-\subsection{Scenario-Based Partitioning and Split Justification}
-Because consecutive time steps within the same 20-second scenario exhibit severe temporal auto-correlation, standard random train/test splitting leads to catastrophic data leakage. We enforced group-aware partitioning at the scenario level ($\mathcal{S}_{train} \cap \mathcal{S}_{val} = \emptyset, \mathcal{S}_{train} \cap \mathcal{S}_{test} = \emptyset$).
-
-To determine and empirically justify the data split ratio, we benchmarked multiple partition configurations across the 178 unique scenarios (6,142 clean interaction samples), training Random Forest regressors under identical hyperparameter budgets, as detailed in Table~\ref{tab:split_benchmark}.
-
-\begin{table}[t]
-\caption{Empirical Benchmark and Justification of Dataset Split Ratios.}
-\label{tab:split_benchmark}
-\centering
-\begin{tabularx}{\textwidth}{lXXXXl}
-\toprule
-\textbf{Split Configuration} & \textbf{Train Set} & \textbf{Val Set} & \textbf{Test Set} & \textbf{ADE@3s} & \textbf{Methodological Trade-Off} \\
-\midrule
-60\% / 20\% / 20\% & 3,737 (106) & 1,189 (35) & 1,216 (37) & 2.593~m & Underfitting; lacks rare corner maneuvers. \\
-80\% / 10\% / 10\% & 4,932 (142) & 577 (17) & 633 (19) & 2.679~m & High validation variance (too few scenes). \\
-70\% / 20\% / 10\% & 4,267 (124) & 1,242 (35) & 633 (19) & 2.626~m & Compact test evaluation baseline. \\
-\textbf{70\% / 15\% / 15\% (Selected)} & \textbf{4,267 (124)} & \textbf{1,055 (26)} & \textbf{820 (28)} & \textbf{2.652~m} & \textbf{Optimal balance of mass \& test power.} \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-The \textbf{70\% / 15\% / 15\%} partition (and the closely related 70\% / 20\% / 10\% split) was selected because:
-\begin{enumerate}
-    \item 4,267 training instances across 124 scenarios provide sufficient diversity for the decision trees to learn sharp decision boundaries on infrequent maneuvers (e.g., hard braking, high-speed turning).
-    \item Reserving $>800$ instances across 28 independent scenarios in the test set guarantees high statistical power for final evaluation, immune to temporal auto-correlation artifacts.
-\end{enumerate}
-
-%
-%
-%
-\section{Proposed Solution: The Predict-to-Plan Architecture}
-\label{sec:solution}
 
 \subsection{Motion and Maneuver Prediction Formulation}
 For each dynamic obstacle $i$, the ML models forecast displacement over future time horizons:
@@ -260,17 +252,34 @@ Figure~\ref{fig:bev_plan} illustrates the spatiotemporal avoidance trajectory ge
 \section{Experimental Evaluation}
 \label{sec:evaluation}
 
-\subsection{Evaluation Metrics}
-Following autonomous driving benchmarks, models were evaluated on:
-\begin{itemize}
-    \item \textbf{Average Displacement Error (ADE@h):} Mean Euclidean distance between predicted and ground-truth positions over the horizon:
-    \begin{equation}
-    \text{ADE} = \frac{1}{N H} \sum_{i=1}^N \sum_{t=1}^H \|\hat{\vec{p}}_i(t) - \vec{p}_i(t)\|
-    \end{equation}
-    \item \textbf{Final Displacement Error (FDE@h):} Euclidean distance at final step $H$.
-    \item \textbf{Closed-Loop Collision Rate (\%):} Percentage of test scenarios where minimum clearance dropped below 2.0~m.
-    \item \textbf{Emergency Decelerations per Run:} Frequency of abrupt decelerations ($a \le -3.0 \text{ m/s}^2$).
-\end{itemize}
+\subsection{Evaluation Metrics and Dataset Split Justification}
+Following autonomous driving benchmarks, models were evaluated on Average Displacement Error (ADE@h), Final Displacement Error (FDE@h), Closed-Loop Collision Rate (\%), and Emergency Decelerations per Run.
+
+Because consecutive time steps within the same 20-second scenario exhibit severe temporal auto-correlation, standard random train/test splitting leads to catastrophic data leakage. We enforced group-aware partitioning at the scenario level ($\mathcal{S}_{train} \cap \mathcal{S}_{val} = \emptyset, \mathcal{S}_{train} \cap \mathcal{S}_{test} = \emptyset$).
+
+To determine and empirically justify the data split ratio, we benchmarked multiple partition configurations across the 178 unique scenarios (6,142 clean interaction samples), training Random Forest regressors under identical hyperparameter budgets, as detailed in Table~\ref{tab:split_benchmark}.
+
+\begin{table}[t]
+\caption{Empirical Benchmark and Justification of Dataset Split Ratios.}
+\label{tab:split_benchmark}
+\centering
+\begin{tabularx}{\textwidth}{lXXXXl}
+\toprule
+\textbf{Split Configuration} & \textbf{Train Set} & \textbf{Val Set} & \textbf{Test Set} & \textbf{ADE@3s} & \textbf{Methodological Trade-Off} \\
+\midrule
+60\% / 20\% / 20\% & 3,737 (106) & 1,189 (35) & 1,216 (37) & 2.593~m & Underfitting; lacks rare corner maneuvers. \\
+80\% / 10\% / 10\% & 4,932 (142) & 577 (17) & 633 (19) & 2.679~m & High validation variance (too few scenes). \\
+70\% / 20\% / 10\% & 4,267 (124) & 1,242 (35) & 633 (19) & 2.626~m & Compact test evaluation baseline. \\
+\textbf{70\% / 15\% / 15\% (Selected)} & \textbf{4,267 (124)} & \textbf{1,055 (26)} & \textbf{820 (28)} & \textbf{2.652~m} & \textbf{Optimal balance of mass \& test power.} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The \textbf{70\% / 15\% / 15\%} partition (and the closely related 70\% / 20\% / 10\% split) was selected because:
+\begin{enumerate}
+    \item 4,267 training instances across 124 scenarios provide sufficient diversity for the decision trees to learn sharp decision boundaries on infrequent maneuvers (e.g., hard braking, high-speed turning).
+    \item Reserving $>800$ instances across 28 independent scenarios in the test set guarantees high statistical power for final evaluation, immune to temporal auto-correlation artifacts.
+\end{enumerate}
 
 \subsection{Continuous Trajectory Prediction Benchmark}
 Table~\ref{tab:ml_benchmark} presents the comparative evaluation across physics baselines and ML regressors on the independent test set (1,502 samples).
