@@ -98,19 +98,20 @@ travagens ligeiras (\cref{fig:previsao}).
 \begin{table}[t]
 \centering
 \caption{Planeador A* em 909 situações de 121 cenas, por fonte de
-  previsão. Conflito: o plano passa a menos de \un{3,5}{m} da posição
-  real de um veículo. Travagens máximas: passos de \un{0,1}{s} com a
-  travagem mais forte, em média por situação. Intervalos de confiança a
-  95\% por reamostragem das cenas.}
+  previsão. Colisão: a caixa do veículo autónomo sobrepõe-se à de outro
+  veículo na sua posição real. Conflito: passa a menos de \un{3,5}{m},
+  centro a centro. Travagens: passos de \un{0,1}{s} com a travagem mais
+  forte, em média por situação. Intervalos de confiança a 95\% por
+  reamostragem das cenas.}
 \label{tab:planeamento}
 \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lccc@{}}
 \toprule
-Previsão & Conflitos (\%) & Travagens máximas & Velocidade (m/s) \\
+Previsão & Colisões (\%) & Conflitos (\%) & Travagens \\
 \midrule
-Nenhuma & 21,8 [16,3; 27,3] & 0,11 & 5,49 \\
-Velocidade constante & 20,7 [15,6; 25,7] & 0,02 & 5,38 \\
-Floresta aleatória & 20,2 [15,1; 25,4] & 0,02 & 5,36 \\
-Futuro real & 16,7 [12,0; 21,4] & 0,04 & 5,37 \\
+Nenhuma & 7,5 [4,4; 10,8] & 21,8 [16,3; 27,3] & 0,11 \\
+Velocidade constante & 7,3 [4,2; 10,6] & 20,7 [15,6; 25,7] & 0,02 \\
+Floresta aleatória & 7,6 [4,6; 11,0] & 20,2 [15,1; 25,4] & 0,02 \\
+Futuro real & 7,0 [3,9; 10,4] & 16,7 [12,0; 21,4] & 0,04 \\
 \bottomrule
 \end{tabular*}
 \end{table}
@@ -118,23 +119,25 @@ Futuro real & 16,7 [12,0; 21,4] & 0,04 & 5,37 \\
 A \cref{tab:planeamento} compara as quatro fontes de previsão. Cada
 situação é um instante de uma cena com pelo menos um veículo à frente do
 veículo autónomo, a menos de \un{25}{m}; em cada parte da validação
-cruzada, a floresta é treinada nas outras quatro. Conhecer o futuro é
-melhor do que qualquer das outras fontes: menos 3,5 a 5,1 pontos
-percentuais de conflitos, com intervalos de confiança que excluem o zero.
-Planear sem previsão distingue-se sobretudo pelas travagens máximas,
-cinco vezes mais frequentes. Entre a velocidade constante e a floresta
-aleatória a diferença é de 0,4 pontos percentuais, com intervalo de
-confiança de $-0,8$ a $1,9$: não se distinguem. O ganho de exatidão da
+cruzada, a floresta é treinada nas outras quatro. Pelo critério de
+distância, conhecer o futuro é melhor do que qualquer das outras fontes:
+menos 3,5 a 5,1 pontos percentuais de conflitos, com intervalos que
+excluem o zero. Planear sem previsão distingue-se sobretudo pelas
+travagens máximas, cinco vezes mais frequentes. Entre a velocidade
+constante e a floresta aleatória a diferença é de 0,4 pontos, com
+intervalo de $-0,8$ a $1,9$: não se distinguem. Pelo critério de
+colisão, com as caixas dos veículos, as quatro fontes ficam todas perto
+de 7\%, o futuro real incluído. O ganho de exatidão da
 \cref{tab:previsao} não chega, por agora, ao plano, o que está de acordo
 com a literatura da \cref{sec:integracao}.
 
 O valor do futuro real mostra onde está o problema: mesmo com previsões
-perfeitas há conflitos em 16,7\% das situações, pelo que o limite está no
-planeador e na avaliação, e não nas previsões. Há quatro causas
+perfeitas o plano colide em 7\% das situações, pelo que o limite está no
+planeador e na avaliação, e não nas previsões. Há três causas
 identificadas. O caminho é uma reta na direção atual do veículo, e não a
 faixa. As posições dos outros veículos, previstas e reais, são
-interpoladas em linha reta entre o instante atual e os \un{3}{s}. O
-critério de conflito é uma distância entre centros, que conta veículos da
-faixa do lado; em 3,7\% das situações já há um veículo a menos de
-\un{3,5}{m} no instante inicial. E o teste executa um único plano de
-\un{3}{s} em ciclo aberto, sem voltar a planear.
+interpoladas em linha reta entre o instante atual e os \un{3}{s}. E o
+teste executa um único plano de \un{3}{s} em ciclo aberto, sem voltar a
+planear. Além disso, o planeador decide com o círculo de \un{3,5}{m},
+que conta veículos da faixa do lado, e as caixas usam dimensões fixas em
+vez das de cada veículo.

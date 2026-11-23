@@ -82,7 +82,9 @@ soma o desconforto (quadrado da aceleração) com uma penalização elevada
 por cada passo a menos de \un{3,5}{m} da posição prevista de um veículo; a
 heurística do A* premeia o progresso. As posições previstas vêm de uma de
 quatro fontes: nenhuma (os outros ficam onde estão), velocidade constante,
-floresta aleatória ou o futuro real, que serve de limite superior.
+floresta aleatória ou o futuro real, que serve de limite superior. O
+plano é avaliado contra as posições reais de duas formas: pela mesma
+distância de \un{3,5}{m} e pela sobreposição das caixas dos veículos.
 
 Duas ressalvas sobre a implementação atual. A colisão entra como custo e
 não como proibição, e a heurística não é admissível, pelo que o plano

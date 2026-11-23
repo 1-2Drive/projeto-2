@@ -85,11 +85,17 @@ def run(df: pd.DataFrame, n_splits: int) -> pd.DataFrame:
             )
             obstacles = obstacle_trajectories(group, rf.predict_displacements(group)["3s"])
             start_gap = float(np.hypot(group.agent_x - ego.ego_x, group.agent_y - ego.ego_y).min())
+            headings = {int(o.track_id): float(o.agent_heading) for _, o in group.iterrows()}
             row = {"scenario_id": scenario_id, "step": int(step), "fold": fold, "start_gap": start_gap}
             for mode in MODES:
                 s_tr, v_tr, a_tr = planner.plan_trajectory(float(ego.ego_speed), path, obstacles[mode])
-                res = planner.evaluate_plan_against_ground_truth(mode, path, s_tr, v_tr, a_tr, obstacles["oraculo"])
-                row[f"{mode}_conflict"] = bool(res.collision_occurred)
+                res = planner.evaluate_plan_against_ground_truth(
+                    mode, path, s_tr, v_tr, a_tr, obstacles["oraculo"],
+                    ego_heading=float(ego.ego_heading), gt_headings=headings,
+                )
+                row[f"{mode}_conflict"] = bool(res.collision_occurred)  # a menos de 3,5 m, centro a centro
+                row[f"{mode}_collision"] = bool(res.obb_collision_occurred)  # sobreposição das caixas dos veículos
+                row["start_overlap"] = bool(res.initial_overlap_detected)
                 row[f"{mode}_hard_brakes"] = int(res.emergency_braking_events)
                 row[f"{mode}_speed"] = float(res.average_speed)
             rows.append(row)
@@ -97,8 +103,8 @@ def run(df: pd.DataFrame, n_splits: int) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def bootstrap_by_scenario(results: pd.DataFrame, n_boot: int, seed: int = 0):
-    """Percentis 2,5 e 97,5 da taxa de conflito de cada modo e das diferenças entre modos."""
+def bootstrap_by_scenario(results: pd.DataFrame, n_boot: int, seed: int = 0, metric: str = "conflict"):
+    """Percentis 2,5 e 97,5 da taxa (conflito ou colisão) de cada modo e das diferenças entre modos."""
     rng = np.random.default_rng(seed)
     by_scenario = {s: g.index.to_numpy() for s, g in results.groupby("scenario_id")}
     keys = list(by_scenario)
@@ -108,9 +114,9 @@ def bootstrap_by_scenario(results: pd.DataFrame, n_boot: int, seed: int = 0):
     for _ in range(n_boot):
         sample = results.loc[np.concatenate([by_scenario[k] for k in rng.choice(keys, len(keys))])]
         for m in MODES:
-            rates[m].append(sample[f"{m}_conflict"].mean() * 100)
+            rates[m].append(sample[f"{m}_{metric}"].mean() * 100)
         for a, b in pairs:
-            diffs[(a, b)].append((sample[f"{a}_conflict"].mean() - sample[f"{b}_conflict"].mean()) * 100)
+            diffs[(a, b)].append((sample[f"{a}_{metric}"].mean() - sample[f"{b}_{metric}"].mean()) * 100)
 
     def ci(values):
         return tuple(np.percentile(values, [2.5, 97.5]))
@@ -136,22 +142,26 @@ def main() -> None:
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     results.to_csv(args.out, index=False)
 
-    rate_ci, diff_ci = bootstrap_by_scenario(results, args.bootstrap)
     print(f"\nSituações: {len(results)} | cenas: {results.scenario_id.nunique()}")
-    already = (results.start_gap < 3.5).mean() * 100
-    print(f"Situações que já começam com um veículo a menos de 3,5 m: {already:.1f}%\n")
-    print(f"{'previsão':<10}{'conflitos %':>12}{'IC 95%':>16}{'travagens máx.':>16}{'vel. média':>12}")
-    for m in MODES:
-        lo, hi = rate_ci[m]
-        print(
-            f"{m:<10}{results[f'{m}_conflict'].mean() * 100:>12.1f}{f'[{lo:.1f}; {hi:.1f}]':>16}"
-            f"{results[f'{m}_hard_brakes'].mean():>16.2f}{results[f'{m}_speed'].mean():>12.2f}"
-        )
-    print("\nDiferenças na taxa de conflito (pontos percentuais; IC 95% por cenário):")
-    for (a, b), (lo, hi) in diff_ci.items():
-        d = (results[f"{a}_conflict"].mean() - results[f"{b}_conflict"].mean()) * 100
-        flag = "" if lo <= 0 <= hi else "  <- o intervalo exclui o zero"
-        print(f"  {a} - {b}: {d:+.1f} [{lo:+.1f}; {hi:+.1f}]{flag}")
+    print(f"Situações que já começam com um veículo a menos de 3,5 m: {(results.start_gap < 3.5).mean() * 100:.1f}%")
+    print(f"Situações que já começam com as caixas sobrepostas: {results.start_overlap.mean() * 100:.1f}%")
+
+    labels = {"collision": "colisão (caixas dos veículos sobrepostas)", "conflict": "conflito (a menos de 3,5 m, centro a centro)"}
+    for metric, label in labels.items():
+        rate_ci, diff_ci = bootstrap_by_scenario(results, args.bootstrap, metric=metric)
+        print(f"\n== {label}")
+        print(f"{'previsão':<10}{'%':>8}{'IC 95%':>16}{'travagens máx.':>16}{'vel. média':>12}")
+        for m in MODES:
+            lo, hi = rate_ci[m]
+            print(
+                f"{m:<10}{results[f'{m}_{metric}'].mean() * 100:>8.1f}{f'[{lo:.1f}; {hi:.1f}]':>16}"
+                f"{results[f'{m}_hard_brakes'].mean():>16.2f}{results[f'{m}_speed'].mean():>12.2f}"
+            )
+        print("Diferenças (pontos percentuais; IC 95% por cenário):")
+        for (a, b), (lo, hi) in diff_ci.items():
+            d = (results[f"{a}_{metric}"].mean() - results[f"{b}_{metric}"].mean()) * 100
+            flag = "" if lo <= 0 <= hi else "  <- o intervalo exclui o zero"
+            print(f"  {a} - {b}: {d:+.1f} [{lo:+.1f}; {hi:+.1f}]{flag}")
     print(f"\nResultados por situação em {args.out}")
 
 
