@@ -1,0 +1,21 @@
+% Resumo: 150 a 250 palavras (regra do formato LNCS).
+\begin{abstract}
+Um veículo autónomo tem de prever o movimento dos outros utentes da via e
+de usar essa previsão para planear o seu próprio movimento. Este artigo
+revê o estado da arte nas duas frentes, a previsão de trajetórias e o
+planeamento de movimento, e na forma como se ligam e se avaliam, com
+atenção ao que conseguem os modelos de aprendizagem automática clássica,
+sem redes neuronais. Apresenta ainda resultados preliminares de uma
+arquitetura «prever para planear» sobre o Waymo Open Motion Dataset:
+florestas aleatórias que aprendem, no referencial de cada veículo, a
+correção a uma extrapolação de velocidade constante, e um planeador de
+velocidade A* que trata as previsões como obstáculos móveis. Em 149 cenas
+reais (13\,856 amostras, validação cruzada agrupada por cena), o erro
+médio de posição desce de \un{4,97}{m} para \un{2,47}{m} a \un{3}{s} e de
+\un{12,57}{m} para \un{6,66}{m} a \un{5}{s}, face à velocidade constante.
+No planeamento, a versão atual do planeador ainda não converte esse ganho
+numa redução mensurável dos conflitos; identificam-se as causas e o
+trabalho necessário para o conseguir.
+
+\keywords{\palavraschave}
+\end{abstract}

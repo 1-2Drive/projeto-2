@@ -1,0 +1,91 @@
+% ~1,5 páginas
+\section{Abordagem proposta}
+\label{sec:abordagem}
+
+A \cref{fig:arquitetura} resume a arquitetura.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+    node distance=4.5mm,
+    caixa/.style={draw=corEscura, rounded corners=2pt, align=center,
+      font=\scriptsize, inner sep=3pt, minimum height=9mm, text width=17mm},
+    seta/.style={-{Stealth[length=1.6mm]}, draw=corEscura}]
+  \node[caixa] (dados) {Cenas do WOMD\\(\un{20}{s}, \un{10}{Hz})};
+  \node[caixa, right=of dados] (amostras) {Amostras\\(veículo, instante)};
+  \node[caixa, right=of amostras] (prev)
+    {Previsão\\vel.\ constante\\+ correção};
+  \node[caixa, right=of prev] (plan) {Planeador A*\\$(s, v, t)$};
+  \node[caixa, right=of plan] (aval) {Avaliação\\contra o registo};
+  \draw[seta] (dados) -- (amostras);
+  \draw[seta] (amostras) -- (prev);
+  \draw[seta] (prev) -- (plan);
+  \draw[seta] (plan) -- (aval);
+\end{tikzpicture}
+\caption{Arquitetura «prever para planear»: das cenas gravadas ao plano de
+  velocidade do veículo autónomo.}
+\label{fig:arquitetura}
+\end{figure}
+
+\subsection{Dados e amostras}
+
+Usam-se dois ficheiros da versão de \un{20}{s} do WOMD, com 149 cenas.
+Uma amostra é um par (veículo, instante). Em cada cena toma-se um
+instante por segundo e, nele, todos os veículos a menos de \un{55}{m} do
+veículo autónomo, em movimento (pelo menos \un{0,5}{m/s}) e observados sem
+falhas no segundo anterior. O resultado são 13\,856 amostras de 2\,343
+veículos. O alvo é o deslocamento do veículo 1, 3 e \un{5}{s} depois; o
+de \un{5}{s} só existe em 10\,295 amostras, porque muitos veículos deixam
+de ser observados antes disso, e as restantes não entram no treino nem na
+avaliação desse horizonte.
+
+\subsection{Características e modelos}
+
+Cada amostra é descrita por 21 variáveis calculadas apenas com o passado e
+o presente, em três grupos:
+\begin{itemize}
+  \item movimento do próprio veículo, no seu referencial: velocidade
+    longitudinal e lateral, aceleração estimada, taxa de viragem e
+    deslocamento no último segundo;
+  \item veículo da frente: distância, velocidade e velocidade de
+    aproximação, quando existe um veículo ou ciclista na mesma direção, a
+    menos de \un{60}{m} e de \un{1,8}{m} de desvio lateral (acontece em
+    66\% das amostras);
+  \item relação com o veículo autónomo: posição e velocidade relativas,
+    distância, velocidade de aproximação e tempo até à colisão.
+\end{itemize}
+
+Seguindo as duas ideias da \cref{sec:previsao}, o modelo não prevê a
+posição futura em coordenadas do mapa. Prevê, no referencial do veículo,
+a diferença entre o deslocamento real e o que a velocidade constante
+daria:
+\begin{equation}
+  \hat{\mathbf{d}}_h = \mathbf{v}\,h + f_h(\mathbf{x}),
+  \qquad h \in \{1, 3, 5\}~\mathrm{s},
+\end{equation}
+em que $\mathbf{v}$ é a velocidade atual, $\mathbf{x}$ o vetor de
+características e $f_h$ um modelo treinado para o horizonte $h$. Assim, um
+veículo que segue em frente tem correção nula seja qual for a direção da
+estrada no mapa, e o modelo concentra-se nos desvios: travagens,
+acelerações e curvas. Comparam-se três modelos para $f_h$: árvore de
+decisão (profundidade 6), floresta aleatória (60 árvores, profundidade 8)
+e \emph{gradient boosting} por histogramas (80 iterações).
+
+\subsection{Planeador}
+
+O planeador segue a decomposição caminho-velocidade
+(\cref{sec:planeamento}): o caminho é dado e planeia-se a velocidade. Um
+estado é $(s, v, t)$, a distância percorrida, a velocidade e o instante,
+com passo de \un{0,1}{s} e horizonte de \un{3}{s}. As ações são quatro
+acelerações: $-3$, $-1,5$, $0$ e \un{$+1,5$}{m/s$^2$}. O custo de um plano
+soma o desconforto (quadrado da aceleração) com uma penalização elevada
+por cada passo a menos de \un{3,5}{m} da posição prevista de um veículo; a
+heurística do A* premeia o progresso. As posições previstas vêm de uma de
+quatro fontes: nenhuma (os outros ficam onde estão), velocidade constante,
+floresta aleatória ou o futuro real, que serve de limite superior.
+
+Duas ressalvas sobre a implementação atual. A colisão entra como custo e
+não como proibição, e a heurística não é admissível, pelo que o plano
+devolvido não tem garantia de ser o ótimo. E o código, em Python, não
+está otimizado: prever e planear demoram, cada um, cerca de \un{0,1}{s}
+por instante, o que ainda não chega para tempo real.

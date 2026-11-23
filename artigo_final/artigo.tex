@@ -1,0 +1,46 @@
+% ===============================================================
+%  Prever para Planear — artigo científico
+%  Formato: Springer Lecture Notes in Computer Science (llncs.cls)
+%
+%  Compilação:  ./build.sh
+%          ou:  latexmk -pdf -outdir=build artigo.tex
+%          ou:  no Overleaf, carregar esta pasta e escolher artigo.tex
+%               como documento principal
+%
+%  Limite: 12 páginas, referências incluídas.
+% ===============================================================
+
+\documentclass[runningheads,a4paper]{llncs}
+
+\input{metadados}
+\input{preambulo}
+
+\begin{document}
+
+\title{\tituloprincipal}
+\titlerunning{\titulocurto}
+\author{\listaautores}
+\authorrunning{\autorescurtos}
+\institute{\instituicao\\
+  \curso\\
+  \morada\\
+  \email{\emails}}
+
+\maketitle
+
+\input{seccoes/resumo}
+
+\input{seccoes/introducao}
+\input{seccoes/estado_arte}
+\input{seccoes/abordagem}
+\input{seccoes/resultados}
+\input{seccoes/conclusao}
+
+\input{seccoes/agradecimentos}
+
+% Estilo de referências da Springer (numérico, com DOI). Só aparecem
+% na lista as entradas de referencias.bib citadas no texto.
+\bibliographystyle{splncs04}
+\bibliography{referencias}
+
+\end{document}
