@@ -1,16 +1,16 @@
 {
   "dataset_metadata": {
-    "directory": "/Users/ctw04483/Downloads/archive",
+    "directory": "data/raw",
     "file_count": 2,
     "files": [
       {
-        "path": "/Users/ctw04483/Downloads/archive/training_20s.tfrecord-00000-of-01000",
+        "path": "data/raw/training_20s.tfrecord-00000-of-01000",
         "filename": "training_20s.tfrecord-00000-of-01000",
         "bytes": 94580752,
         "size_mb": 90.2
       },
       {
-        "path": "/Users/ctw04483/Downloads/archive/training_20s.tfrecord-00001-of-01000",
+        "path": "data/raw/training_20s.tfrecord-00001-of-01000",
         "filename": "training_20s.tfrecord-00001-of-01000",
         "bytes": 98219608,
         "size_mb": 93.67
