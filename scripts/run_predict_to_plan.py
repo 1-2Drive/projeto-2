@@ -29,6 +29,7 @@ from src.models.trajectory_predictor import (
     ConstantVelocityPredictor,
     ManeuverClassifier,
     MLTrajectoryPredictor,
+    cross_validate_predictors,
     evaluate_maneuver_classifier,
     evaluate_trajectory_predictor,
 )
@@ -54,11 +55,18 @@ def main():
     processed_dir.mkdir(parents=True, exist_ok=True)
     csv_path = processed_dir / "predict_to_plan_samples.csv"
 
+    df_samples = None
     if csv_path.exists() and os.path.getsize(csv_path) > 10000:
         print(f"\n[2/5] Loading existing extracted samples from {csv_path}...")
         df_samples = pd.read_csv(csv_path)
-        print(f"✓ Loaded {len(df_samples)} interactive obstacle samples.")
-    else:
+        required_cols = set(PandasFeaturePipeline.FEATURE_COLS) | {"lead_gap", "lead_speed", "lead_closing_speed", "maneuver_class"}
+        missing_cols = sorted(required_cols - set(df_samples.columns))
+        if missing_cols:
+            print(f"  Saved samples are from an older version (missing {missing_cols}): extracting again.")
+            df_samples = None
+        else:
+            print(f"✓ Loaded {len(df_samples)} interactive obstacle samples.")
+    if df_samples is None:
         print("\n[2/5] Extracting interactive obstacle sequences across scenarios...")
         extractor = SequenceExtractor(
             history_steps=10,
@@ -80,6 +88,10 @@ def main():
                 print(f"  Parsed {scenarios_parsed} scenarios -> {len(all_samples)} trajectory samples...")
 
         df_samples = extractor.samples_to_dataframe(all_samples)
+        # Same cleaning, feature and labelling steps as scripts/preprocess_at_scale.py
+        df_samples = PandasFeaturePipeline.clean_and_filter_outliers(df_samples)
+        df_samples = PandasFeaturePipeline.add_vectorized_kinematic_features(df_samples)
+        df_samples = PandasFeaturePipeline.assign_maneuver_labels(df_samples)
         print(f"✓ Extraction complete: {len(df_samples)} interactive obstacle samples from {scenarios_parsed} scenarios.")
         df_samples.to_csv(csv_path, index=False)
         print(f"✓ Saved extracted samples to {csv_path}")
@@ -91,9 +103,12 @@ def main():
     print(f"  Train set: {len(df_train)} samples across {df_train['scenario_id'].nunique()} scenarios")
     print(f"  Test set:  {len(df_test)} samples across {df_test['scenario_id'].nunique()} scenarios")
 
+    # "[global frame]" = first version of the ML predictor (map coordinates, predicts the displacement itself).
+    # The others work in the vehicle's own frame and predict the correction to constant velocity.
     predictors = [
         ConstantVelocityPredictor(),
         ConstantAccelerationPredictor(),
+        MLTrajectoryPredictor(model_type="random_forest", frame="global", residual=False, n_estimators=60, max_depth=8),
         MLTrajectoryPredictor(model_type="decision_tree", max_depth=6),
         MLTrajectoryPredictor(model_type="random_forest", n_estimators=60, max_depth=8),
         MLTrajectoryPredictor(model_type="gradient_boosting", max_iter=80, max_depth=5),
@@ -106,7 +121,8 @@ def main():
         if isinstance(p, MLTrajectoryPredictor):
             print(f"  Training {p.name}...")
             p.fit(df_train)
-            trained_models[p.model_type] = p
+            if p.frame == "agent":
+                trained_models[p.model_type] = p
 
         metrics, preds = evaluate_trajectory_predictor(p, df_test)
         metrics_list.append(metrics)
@@ -115,6 +131,24 @@ def main():
     df_metrics = pd.DataFrame([m.__dict__ for m in metrics_list])
     print("\n--- ML Trajectory Prediction Benchmark Results ---")
     print(df_metrics.to_string(index=False))
+
+    # Scenario-grouped cross-validation: each scenario is tested once, never seen in training
+    print("\n--- 5-fold cross-validation grouped by scenario (final error in metres, mean ± std) ---")
+    df_cv = cross_validate_predictors(
+        {
+            "Constant Velocity (CV)": lambda: ConstantVelocityPredictor(),
+            "Constant Acceleration (CA)": lambda: ConstantAccelerationPredictor(),
+            "Random Forest [global frame]": lambda: MLTrajectoryPredictor(
+                model_type="random_forest", frame="global", residual=False, n_estimators=60, max_depth=8
+            ),
+            "Decision Tree": lambda: MLTrajectoryPredictor(model_type="decision_tree", max_depth=6),
+            "Random Forest": lambda: MLTrajectoryPredictor(model_type="random_forest", n_estimators=60, max_depth=8),
+            "Gradient Boosting": lambda: MLTrajectoryPredictor(model_type="gradient_boosting", max_iter=80, max_depth=5),
+        },
+        df_samples,
+        n_splits=5,
+    )
+    print(df_cv.to_string(index=False))
 
     # Feature Importance analysis
     rf_model = trained_models.get("random_forest")
@@ -127,6 +161,7 @@ def main():
     # Maneuver Intent Classification Benchmark
     print("\n--- Maneuver Intent Classification Benchmark ---")
     classifiers = [
+        ManeuverClassifier(model_type="random_forest", frame="global", n_estimators=60, max_depth=8),
         ManeuverClassifier(model_type="random_forest", n_estimators=60, max_depth=8),
         ManeuverClassifier(model_type="gradient_boosting", max_iter=80, max_depth=5),
     ]
@@ -315,6 +350,8 @@ def main():
         f.write("# Resultados Experimentais: Prever para Planear (Predict to Plan)\n\n")
         f.write("## 1. Benchmark de Modelos de Predição de Trajetória (Regressão Contínua)\n\n")
         f.write(df_metrics.to_markdown(index=False) + "\n\n")
+        f.write("### Validação cruzada por cenário (5 partes; erro final em metros, média ± desvio-padrão)\n\n")
+        f.write(df_cv.to_markdown(index=False) + "\n\n")
         f.write("## 2. Benchmark de Classificação de Intenção / Manobra (Classificação Multiclasse)\n\n")
         f.write(df_clf_metrics.to_markdown(index=False) + "\n\n")
         if rf_model and importances is not None:

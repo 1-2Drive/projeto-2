@@ -59,6 +59,35 @@ class PandasFeaturePipeline:
         "ego_speed",
     ]
 
+    # Input features in the AGENT's own frame (x = forward, y = left of the vehicle).
+    # Two vehicles doing the same thing look the same to the model whatever their compass
+    # direction, which the global-frame columns above (agent_vx, agent_vy, past_dx_1s, ...) do not allow.
+    # Exact duplicates in FEATURE_COLS are dropped: longitudinal_gap (= rel_x), lateral_gap (= rel_y)
+    # and past_heading_change (= yaw_rate_1s).
+    AGENT_FRAME_FEATURE_COLS = [
+        "agent_speed",
+        "v_lon",
+        "v_lat",
+        "agent_accel_est",
+        "yaw_rate_1s",
+        "past_lon_1s",
+        "past_lat_1s",
+        "past_speed_mean",
+        "lead_gap",
+        "lead_speed",
+        "lead_closing_speed",
+        "rel_x",
+        "rel_y",
+        "rel_vx",
+        "rel_vy",
+        "rel_heading",
+        "distance_to_ego",
+        "closing_speed",
+        "ttc",
+        "azimuth_angle",
+        "ego_speed",
+    ]
+
     TARGET_REGRESSION_COLS = [
         "future_dx_1s",
         "future_dy_1s",
@@ -175,6 +204,26 @@ class PandasFeaturePipeline:
         # Estimated longitudinal acceleration over past 1s: (v_curr - v_past)
         df_feat["agent_accel_est"] = df_feat["agent_speed"] - df_feat["past_speed_mean"]
 
+        return df_feat
+
+    @staticmethod
+    def add_agent_frame_features(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Rotates the agent's velocity and past displacement from the global frame (east/north)
+        into the agent's own frame (forward/left), using its heading at the current instant.
+        """
+        df_feat = df.copy()
+        cos_h = np.cos(df_feat["agent_heading"].to_numpy())
+        sin_h = np.sin(df_feat["agent_heading"].to_numpy())
+        vx = df_feat["agent_vx"].to_numpy()
+        vy = df_feat["agent_vy"].to_numpy()
+        px = df_feat["past_dx_1s"].to_numpy()
+        py = df_feat["past_dy_1s"].to_numpy()
+
+        df_feat["v_lon"] = cos_h * vx + sin_h * vy
+        df_feat["v_lat"] = -sin_h * vx + cos_h * vy
+        df_feat["past_lon_1s"] = cos_h * px + sin_h * py
+        df_feat["past_lat_1s"] = -sin_h * px + cos_h * py
         return df_feat
 
     @staticmethod
