@@ -1,0 +1,78 @@
+% ---------------------------------------------------------------
+% preambulo.tex — pacotes, estilos e macros
+%
+% A classe llncs (Springer LNCS) define as margens, os tipos de letra e
+% os títulos. Não se alteram aqui: mexer em margens ou tamanhos de letra
+% faz o artigo deixar de cumprir o formato (e o limite de páginas).
+% ---------------------------------------------------------------
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+% Português. Com o ficheiro de língua clássico (portuges.ldf) usa-se esse;
+% numa instalação mínima sem ele, o babel moderno carrega a língua pelo
+% ficheiro .ini. O resultado é o mesmo.
+% O babel clássico torna " um atalho que «come» o carácter seguinte;
+% desativa-se, para que aspas escritas diretamente não estraguem o texto.
+\IfFileExists{portuges.ldf}%
+  {\usepackage[portuguese]{babel}%
+   \AtBeginDocument{\shorthandoff{"}}}%
+  {\usepackage[portuguese,provide=*]{babel}}
+\usepackage{lmodern}       % Computer Modern em T1 (acentos nativos)
+\usepackage{microtype}
+
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{icomma}        % vírgula decimal em modo matemático: $1,5$
+\usepackage{xcolor}
+\usepackage{tikz}          % diagrama da arquitetura
+\usetikzlibrary{positioning,arrows.meta}
+
+% --- Cores -------------------------------------------------------
+\definecolor{corEscura}{HTML}{1F3A5F}
+\definecolor{corAviso}{HTML}{B45309}
+
+% --- Ligações ----------------------------------------------------
+\usepackage[pdfusetitle]{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=corEscura,
+  citecolor=corEscura,
+  urlcolor=corEscura
+}
+% URL e DOI das referências no tipo de letra do texto (recomendação da
+% Springer), em vez de monoespaçado.
+\renewcommand\UrlFont{\rmfamily}
+
+% O cleveref não traz nomes em português; definem-se aqui.
+\usepackage[capitalise,noabbrev,nameinlink]{cleveref}
+\crefname{section}{Secção}{Secções}
+\crefname{subsection}{Secção}{Secções}
+\crefname{figure}{Figura}{Figuras}
+\crefname{table}{Tabela}{Tabelas}
+\crefname{equation}{Equação}{Equações}
+\newcommand{\crefrangeconjunction}{ a }
+\newcommand{\crefpairconjunction}{ e }
+\newcommand{\crefmiddleconjunction}{, }
+\newcommand{\creflastconjunction}{ e }
+
+% --- Textos fixos da classe llncs em português -------------------
+% O babel traduz «Resumo», «Figura», «Tabela» e «Referências»; as
+% palavras-chave são da classe e traduzem-se à mão.
+\AtBeginDocument{%
+  \renewcommand{\keywordname}{\textbf{Palavras-chave:}}%
+  \renewcommand{\andname}{e}%            entre dois autores
+  \renewcommand{\lastandname}{\unskip\ e}% antes do último autor
+}
+
+% --- Macros próprias ---------------------------------------------
+% Informação em falta, realçada a laranja. Antes de entregar não pode
+% sobrar nenhuma (o build.sh não as deteta: procurar por \preencher).
+\newcommand{\preencher}[1]{\textcolor{corAviso}{\textbf{[#1]}}}
+
+% Unidades com espaço fino e sem quebra de linha: \un{2,5}{m}.
+\newcommand{\un}[2]{#1\,\mbox{#2}}
+
+% Nomes de variáveis do código (colunas das tabelas de dados).
+\newcommand{\var}[1]{\texttt{\detokenize{#1}}}
