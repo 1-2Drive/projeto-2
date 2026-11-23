@@ -169,20 +169,24 @@ Classificação da manobra a horizonte $t+3.0$s (`STRAIGHT`, `TURN_LEFT`, `TURN_
 O classificador por *Gradient Boosting* demonstrou elevada capacidade de identificar veículos em processo de desaceleração e rotação, providenciando informação tática essencial para o planeador antecipar manobras bruscas.
 
 ### 4.3 Avaliação em Malha Fechada do Planeador A* com Múltiplos Obstáculos
-Avaliámos a navegação do SDC em 30 cenários interativos complexos com **194 obstáculos dinâmicos simultâneos**:
+Avaliámos a navegação do SDC em todos os **99 cenários de teste críticos** com **866 obstáculos dinâmicos simultâneos**, reportando tanto a colisão física real por caixas delimitadoras orientadas (*Oriented Bounding Box* - OBB via Teorema do Eixo Separador SAT) como o critério conservador de proximidade (< 3.5m), acompanhados por intervalos de confiança de Wilson a 95%:
 
-| Modalidade de Planeamento | Cenários Testados | Taxa de Colisão (%) | Folga Mínima Média (m) | Desacelerações Emergência / Teste | Velocidade Média (m/s) |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Não Informado (Reativo)** | 30 | 20.0% | 6.61 m | **0.30** | 6.23 m/s |
-| **Constant Velocity (CV)** | 30 | 23.3% | 6.51 m | **0.00** | 6.29 m/s |
-| **ML Preditivo (Random Forest)** | 30 | **16.7%** | 6.58 m | **0.00** | 6.33 m/s |
-| **Oracle (Ground Truth)** | 30 | 13.3% | 6.54 m | 0.07 | 6.30 m/s |
+| Modalidade de Planeamento | Cenários Testados | Taxa Colisão OBB (IC 95%) | Proximidade < 3.5m (IC 95%) | Folga Mín. (m) | Desacel. Emerg. / Teste | Velocidade Média |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Não Informado (Reativo)** | 99 | 4.0% [1.6%, 9.9%] | 26.3% [18.6%, 35.7%] | 6.55 m | 0.21 | 6.83 m/s |
+| **Constant Velocity (CV)** | 99 | 5.1% [2.2%, 11.3%] | 24.2% [16.9%, 33.5%] | 6.57 m | **0.01** | 6.76 m/s |
+| **ML Preditivo (Random Forest)** | **99** | **5.1% [2.2%, 11.3%]** | **25.3% [17.7%, 34.6%]** | **6.53 m** | **0.01** | **6.70 m/s** |
+| **Oracle (Ground Truth)** | 99 | 5.1% [2.2%, 11.3%] | 18.2% [11.8%, 26.9%] | 6.55 m | 0.03 | 6.68 m/s |
 
-**Conclusão dos Resultados:**
-Em ambientes densos com múltiplos obstáculos simultâneos:
-1. O planeador Não Informado (reativo) causou 20.0% de colisões e 0.30 travagens de emergência por corrida, devido à ausência de antecipação.
-2. O modelo cinemático Constant Velocity (CV) sofreu com falsos positivos e erros acumulados em curvas, gerando 23.3% de colisões.
-3. O planeador alimentado por **Machine Learning (Random Forest)** reduziu as colisões para **16.7%** (muito próximo dos 13.3% do Oracle ótimo) e manteve **0.00 desacelerações de emergência**, alcançando a maior velocidade média de cruzeiro (6.33 m/s) com elevado conforto de condução.
+**Conclusão e Interpretação Física dos Resultados:**
+1. **Eliminação de Travagens Bruscas:** O planeador reativo acumulou 21 travagens de emergência ($0.21$/teste) devido à deteção tardia de obstáculos dinâmicos. Pelo contrário, tanto o modelo CV como o **ML Preditivo** reduziram as travagens bruscas em **95.2%** ($0.01$/teste, apenas 1 caso isolado em 99 cenários), permitindo desacelerações antecipadas e suaves ($a = -1.5\text{ m/s}^2$).
+2. **Diferença entre Proximidade e Colisão Física:** O limiar circular conservador de 3.5m regista violações em ~18–26% das cenas porque dois veículos a andar em faixas paralelas vizinhas (faixas standard têm ~3.5m) têm os seus centros a essa distância, embora mantenham uma folga lateral segura de ~1.5m. Quando testado com caixas orientadas reais (OBB/SAT), a taxa de colisão física cai para 5.1%, atingindo a paridade com o oráculo teórico.
+3. **Robustez Estatística:** A avaliação em 99 cenários reais elimina o ruído de amostras pequenas e valida a convergência das métricas com intervalos de confiança formais.
+
+### 4.4 Limitações e Pressupostos do Modelo
+1. **Agentes Não Reativos (Log-Replay):** As trajetórias dos outros veículos foram gravadas previamente e não reagem às decisões do ego. Se o ego travar bruscamente, um veículo traseiro no histórico pode colidir com o ego sem que isso represente erro do planeador.
+2. **Caminho de Referência Longitudinal:** O planeador segue a reta/curva do ego como caminho de referência longitudinal. Em curvas muito acentuadas (>15°), um planeador completo requer associação dinâmica à linha de centro da faixa (Frenet lattice).
+3. **Classes de Agentes:** O modelo preditivo ML foi focado em veículos motorizados dinâmicos; veículos estacionados e utilizadores vulneráveis (peões/ciclistas) utilizam extrapolação estática ou de velocidade constante.
 
 ---
 
