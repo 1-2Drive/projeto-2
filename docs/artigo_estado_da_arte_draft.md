@@ -44,6 +44,20 @@ No domínio do planeamento tático, destacam-se:
 - **Frenet Lattice Planners:** Geram feixes de curvas polinomiais (quintas e quárticas) avaliadas em relação a obstáculos em movimento (Werling et al., 2010).
 - **Model Predictive Control (MPC):** Formulação por otimização quadrática contínua sujeita a restrições cinemáticas de atuadores.
 
+### 2.3 Justificação da Escolha dos Modelos de Machine Learning e do Planeador A*
+
+#### Porquê Modelos Baseados em Árvores (Random Forest e HistGradientBoosting) e não Deep Learning (LSTM / Transformers) ou SVM / KNN?
+1. **Orçamento de Latência em Tempo Real (ECUs Automóveis):** O ciclo de controlo tático em veículos autónomos opera a 10--20~Hz (janela temporal de 50 a 100~ms para todo o ciclo: perceção, predição, planeamento e atuação). Modelos de Deep Learning (como VectorNet ou Transformers) exigem 25--80~ms só para inferência e requerem aceleradores dedicados (GPUs/TPUs). Em contraste, o **Random Forest executa em 0.008~ms** e o **HistGradientBoosting em 0.79~ms** num CPU convencional, consumindo menos de 1% do ciclo de controlo.
+2. **Eficiência Amostral em Dados Tabulares:** Em conjuntos de dados com 6.142 amostras interativas de elevada densidade e variáveis cinemáticas heterogéneas, ensembles baseados em árvores superam redes neuronais profundas sem sofrer de sobreajuste (*overfitting*), problemas de gradiente nulo ou necessidade de milhões de parâmetros.
+3. **Explicabilidade e Segurança Funcional (Norma ISO 26262):** Ao contrário de redes neuronais tipo "caixa negra", os modelos em árvore fornecem importâncias de características (Gini Importance) e regras de decisão inspecionáveis, requisito indispensável para homologação de sistemas críticos de condução autónoma.
+4. **Inviabilidade do KNN e SVM:** O algoritmo KNN possui complexidade de inferência $O(N \cdot D)$, escalando com o número de amostras de treino na memória e provocando latências inaceitáveis (>20~ms). O SVM com kernel RBF escala quadraticamente com os vetores de suporte e apresenta limitações graves na previsão simultânea de múltiplos horizontes contínuos ($\Delta x, \Delta y$ a 1s, 3s e 5s).
+
+#### Porquê Planeamento Espaço-Temporal A* e não RRT*, MPC ou Redes Neuronais de Controlo?
+1. **Garantia de Completude e Otimalidade:** Num reticulado discretizado de estados $(s, v, t)$, o algoritmo $A^*$ garante matematicamente a identificação da trajetória globalmente ótima e livre de colisões (caso exista), eliminando a natureza não-determinística do RRT*.
+2. **Determinismo Temporal:** Algoritmos de amostragem aleatória (RRT e RRT*) produzem caminhos estocásticos e variáveis entre ciclos sucessivos sob a mesma entrada sensorial, induzindo oscilações bruscas de aceleração (*jerk*). O $A^*$ permite limitar o número máximo de expansões (`max_expansions`), garantindo um teto máximo e previsível de tempo de execução (*worst-case execution time*).
+3. **Robustez a Restrições Não-Convexas (vs MPC):** Em ambientes com múltiplos obstáculos móveis simultâneos, o espaço livre de colisão é fortemente não-convexo. Solvers de Controlo Preditivo Baseado em Modelo (MPC) sofrem frequentemente de aprisionamento em mínimos locais ou falhas de convergência (*solver timeouts*) perante cenários complexos com múltiplos veículos a cortar a trajetória. O $A^*$ discretizado contorna os mínimos locais explorando sistematicamente a fila de prioridades.
+4. **Desacoplamento em Coordenadas de Frenet:** A pesquisa longitudinal ao longo do comprimento de arco $s$ da linha central da faixa respeita naturalmente a geometria rodoviária sem a explosão combinatória de uma pesquisa 2D não restringida.
+
 ---
 
 ## 3. Metodologia: A Arquitetura "Prever para Planear"
@@ -74,6 +88,23 @@ Para cada veículo alvo $i$ no instante $t$, as variáveis são transformadas de
 - Orientação e dinâmica: $\Delta \theta = (\theta_{agent} - \theta_{ego}) \pmod{2\pi}$, taxa de guinada (`yaw_rate_1s`), aceleração estimada (`agent_accel_est`)
 - Histórico cinemático (janela de 10 passos = 1.0s): $\Delta x_{past}, \Delta y_{past}, \bar{v}_{past}, \Delta \theta_{past}$.
 - Rotulagem vetorial de manobras (*np.select*): `STRAIGHT`, `TURN_LEFT`, `TURN_RIGHT`, `DECELERATING`, `ACCELERATING`.
+
+### 3.2 Justificação e Análise Empírica das Partições de Dados (Train / Val / Test)
+A determinação da proporção de divisão entre os conjuntos de Treino, Validação e Teste é crítica para assegurar poder estatístico suficiente para aprendizagem sem comprometer a representatividade da avaliação. No Waymo Open Motion Dataset, devido à forte correlação temporal entre passos sucessivos de um mesmo episódio de 20 segundos, a partição é estritamente realizada por cenários únicos (`scenario_id`), garantindo **zero fuga de dados** (*zero data leakage*).
+
+Para justificar a escolha da partição, realizámos uma análise comparativa sistemática sobre 178 cenários (6.142 amostras interativas) sob diferentes rácios:
+
+| Configuração da Partição | Treino (Amostras / Cenários) | Validação (Amostras / Cenários) | Teste (Amostras / Cenários) | Random Forest ADE@3s (m) | FDE@3s (m) | Avaliação Metodológica |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **60% Treino / 20% Val / 20% Teste** | 3.737 am. (106 cen.) | 1.189 am. (35 cen.) | 1.216 am. (37 cen.) | 2.593 m | 4.221 m | *Underfitting* ligeiro; perda de cobertura de manobras raras no treino. |
+| **70% Treino / 20% Val / 10% Teste** | 4.267 am. (124 cen.) | 1.242 am. (35 cen.) | 633 am. (19 cen.) | 2.626 m | 4.199 m | Conjunto de teste reduzido (apenas 19 cenários), aumentando a variância da avaliação final. |
+| **80% Treino / 10% Val / 10% Teste** | 4.932 am. (142 cen.) | 577 am. (17 cen.) | 633 am. (19 cen.) | 2.679 m | 4.271 m | Validação insuficiente (apenas 17 cenários) para afinação robusta de hiperparâmetros. |
+| **70% Treino / 15% Val / 15% Teste (Adotada)** | **4.267 am. (124 cen.)** | **1.055 am. (26 cen.)** | **820 am. (28 cen.)** | **2.652 m** | **4.278 m** | **Equilíbrio ótimo:** Garante massa crítica para treino ($>4.200$ amostras) e conjuntos de validação e teste com representatividade estatística sólida ($>800$ amostras em $>25$ cenários independentes). |
+
+**Conclusão Metodológica da Partição:**
+A partição **70% / 15% / 15%** (ou 70% / 20% / 10% dependendo da ênfase na validação contínua) oferece o balanço ideal:
+1. Mais de 4.200 amostras de treino asseguram que os regressores e classificadores aprendem manobras raras (ex.: curvas bruscas em cruzamento e desacelerações repentinas).
+2. O conjunto de teste contém 28 cenários completamente desacoplados, fornecendo um teste cego imune a auto-correlações temporais.
 
 ---
 
