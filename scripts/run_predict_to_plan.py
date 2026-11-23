@@ -61,7 +61,11 @@ def main():
         df_samples = pd.read_csv(csv_path)
         required_cols = set(PandasFeaturePipeline.FEATURE_COLS) | {"lead_gap", "lead_speed", "lead_closing_speed", "maneuver_class"}
         missing_cols = sorted(required_cols - set(df_samples.columns))
-        if missing_cols:
+        lead_cols = {"lead_gap", "lead_speed", "lead_closing_speed"}
+        if missing_cols and not shards and set(missing_cols) <= lead_cols:
+            print("  Saved samples have no lead-vehicle features and there are no TFRecord files to extract them")
+            print("  again: using the saved samples as they are (the models assume no vehicle ahead).")
+        elif missing_cols:
             print(f"  Saved samples are from an older version (missing {missing_cols}): extracting again.")
             df_samples = None
         else:

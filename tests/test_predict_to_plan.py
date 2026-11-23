@@ -264,3 +264,14 @@ def test_pandas_feature_pipeline_split(mock_trajectory_df):
     # Zero leakage between scenarios
     assert len(train_scenarios.intersection(test_scenarios)) == 0
 
+
+
+def test_predictor_accepts_samples_without_lead_columns(mock_trajectory_df):
+    """Tables extracted before the lead-vehicle features existed must still train and predict."""
+    old_table = mock_trajectory_df.drop(columns=["lead_gap", "lead_speed", "lead_closing_speed"])
+    with pytest.warns(UserWarning, match="Lead-vehicle columns are missing"):
+        predictor = MLTrajectoryPredictor(model_type="decision_tree", max_depth=3).fit(old_table)
+    with pytest.warns(UserWarning):
+        displacements = predictor.predict_displacements(old_table)
+    assert displacements["3s"].shape == (len(old_table), 2)
+    assert np.isfinite(displacements["3s"]).all()

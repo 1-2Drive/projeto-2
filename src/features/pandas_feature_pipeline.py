@@ -6,9 +6,15 @@ and scaling for autonomous driving motion modeling.
 
 from __future__ import annotations
 
+import warnings
+
 from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
+
+
+# Gap used when there is no vehicle ahead (same value as SequenceExtractor.LEAD_NONE_GAP)
+LEAD_NONE_GAP = 100.0
 
 
 class PandasFeaturePipeline:
@@ -224,6 +230,23 @@ class PandasFeaturePipeline:
         df_feat["v_lat"] = -sin_h * vx + cos_h * vy
         df_feat["past_lon_1s"] = cos_h * px + sin_h * py
         df_feat["past_lat_1s"] = -sin_h * px + cos_h * py
+
+        # Tables extracted before the lead-vehicle features existed do not have these columns.
+        # Fill them with the same values the extractor uses when no vehicle is ahead, so that
+        # older CSV files keep working (the models just cannot use the lead vehicle).
+        lead_cols = ["lead_gap", "lead_speed", "lead_closing_speed"]
+        if any(col not in df_feat.columns for col in lead_cols):
+            warnings.warn(
+                "Lead-vehicle columns are missing: assuming no vehicle ahead. "
+                "Extract the samples again to use the lead-vehicle features.",
+                stacklevel=2,
+            )
+            if "lead_gap" not in df_feat.columns:
+                df_feat["lead_gap"] = LEAD_NONE_GAP
+            if "lead_speed" not in df_feat.columns:
+                df_feat["lead_speed"] = df_feat["v_lon"]
+            if "lead_closing_speed" not in df_feat.columns:
+                df_feat["lead_closing_speed"] = 0.0
         return df_feat
 
     @staticmethod
