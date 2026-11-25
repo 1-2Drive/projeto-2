@@ -6,10 +6,12 @@ Este painel apresenta a estrutura, contratos de dados, estatísticas e amostras 
 
 | Ficheiro | Amostras | Cenários Únicos | Dimensão | Finalidade |
 | :--- | :---: | :---: | :---: | :--- |
-| `data/processed/train.csv` | **4,267** | 124 | 3.1 MB | Treino dos regressores e classificadores |
-| `data/processed/val.csv` | **1,075** | 27 | 791 KB | Afinação de hiperparâmetros e validação |
+| `data/processed/train.csv` | **4,267** | 124 | 3.1 MB | Afinação por cenário e treino dos modelos |
+| `data/processed/val.csv` | **1,075** | 27 | 791 KB | Treino final e validação cruzada, em conjunto com o treino |
 | `data/processed/test.csv` | **800** | 27 | 591 KB | Avaliação cega e métricas finais |
 | `data/processed/predict_to_plan_samples.csv` | **6,142** | 178 | 4.5 MB | Dataset total consolidado |
+
+O comando `python scripts/run_predict_to_plan.py` usa as três partições fixas e verifica que os IDs de cenário são exclusivos de cada uma. A afinação corre em `train.csv`, o treino final usa `train.csv` e `val.csv`, e a avaliação final usa `test.csv`. Para avaliar outras partições já preparadas, usar `--splits-dir CAMINHO`.
 
 ## 2. Dicionário de Colunas e Contratos Formais
 

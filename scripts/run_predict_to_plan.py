@@ -2,17 +2,17 @@
 """
 Complete Predict-to-Plan (Prever para Planear) Evaluation Pipeline.
 Combines:
-1. Waymo Open Motion Dataset scenario sequence extraction
+1. Load the fixed, scenario-disjoint Waymo train/validation/test splits
 2. ML Trajectory Prediction (Physics Baselines vs Decision Tree vs Random Forest)
 3. Spatiotemporal A* Speed and Trajectory Planning
 4. Closed-loop safety and collision evaluation
 5. Generation of metrics tables and scientific figures
 """
 
-import os
+import argparse
+from itertools import combinations
 import sys
 from pathlib import Path
-import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -21,9 +21,6 @@ import matplotlib.pyplot as plt
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.data.tfrecord_reader import discover_tfrecords, iter_scenarios
-from src.preprocessing.sequence_extractor import SequenceExtractor
-from src.features.pandas_feature_pipeline import PandasFeaturePipeline
 from src.models.trajectory_predictor import (
     ConstantAccelerationPredictor,
     ConstantVelocityPredictor,
@@ -42,76 +39,41 @@ from src.planning.astar_planner import (
 )
 
 
+def load_benchmark_splits(directory: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    splits = {}
+    scenario_ids = {}
+    for name in ("train", "val", "test"):
+        path = directory / f"{name}.csv"
+        frame = pd.read_csv(path, dtype={"scenario_id": "string"})
+        if frame.empty or "scenario_id" not in frame or frame["scenario_id"].isna().any():
+            raise ValueError(f"{path} must contain samples with non-missing scenario IDs.")
+        splits[name] = frame
+        scenario_ids[name] = set(frame["scenario_id"])
+
+    for left, right in combinations(scenario_ids, 2):
+        overlap = scenario_ids[left] & scenario_ids[right]
+        if overlap:
+            raise ValueError(f"{left}.csv and {right}.csv share {len(overlap)} scenario IDs (e.g. {min(overlap)}).")
+
+    return splits["train"], splits["val"], splits["test"]
+
+
 def main():
-    print("=" * 70)
-    print("🚀 WAYMO PREDICT-TO-PLAN (PREVER PARA PLANEAR) PIPELINE")
-    print("=" * 70)
+    parser = argparse.ArgumentParser(description="Evaluate Predict-to-Plan on fixed Waymo dataset splits.")
+    parser.add_argument("--splits-dir", type=Path, default=ROOT / "data" / "processed",
+                        help="Directory containing train.csv, val.csv and test.csv")
+    args = parser.parse_args()
+    try:
+        df_train, df_val, df_test = load_benchmark_splits(args.splits_dir)
+    except (FileNotFoundError, ValueError) as exc:
+        parser.error(str(exc))
 
-    # 1. Discover dataset shards (exclude testing shards since testing shards lack future ground truth)
-    all_shards = discover_tfrecords()
-    shards = [s for s in all_shards if not s.name.startswith("testing")]
-    print(f"\n[1/5] Discovered {len(shards)} valid training/validation shards:")
-    total_mb = sum(s.stat().st_size for s in shards) / (1024 * 1024)
-    for s in shards:
-        print(f"  - {s.name} ({s.stat().st_size / (1024*1024):.1f} MB)")
-    print(f"Total dataset size available: {total_mb:.1f} MB")
+    print("\n[1/4] Loaded fixed Waymo splits:")
+    for name, frame in (("Train", df_train), ("Validation", df_val), ("Held-out test", df_test)):
+        print(f"  {name}: {len(frame)} samples across {frame['scenario_id'].nunique()} scenarios")
+    df_development = pd.concat([df_train, df_val], ignore_index=True)
 
-    # 2. Extract or load interactive vehicle trajectory sequences
-    processed_dir = ROOT / "data" / "processed"
-    processed_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = processed_dir / "predict_to_plan_samples.csv"
-
-    df_samples = None
-    if csv_path.exists() and os.path.getsize(csv_path) > 10000:
-        print(f"\n[2/5] Loading existing extracted samples from {csv_path}...")
-        df_samples = pd.read_csv(csv_path)
-        required_cols = set(PandasFeaturePipeline.FEATURE_COLS) | {"lead_gap", "lead_speed", "lead_closing_speed", "maneuver_class"}
-        missing_cols = sorted(required_cols - set(df_samples.columns))
-        lead_cols = {"lead_gap", "lead_speed", "lead_closing_speed"}
-        if missing_cols and not shards and set(missing_cols) <= lead_cols:
-            print("  Saved samples have no lead-vehicle features and there are no TFRecord files to extract them")
-            print("  again: using the saved samples as they are (the models assume no vehicle ahead).")
-        elif missing_cols:
-            print(f"  Saved samples are from an older version (missing {missing_cols}): extracting again.")
-            df_samples = None
-        else:
-            print(f"✓ Loaded {len(df_samples)} interactive obstacle samples.")
-    if df_samples is None:
-        print("\n[2/5] Extracting interactive obstacle sequences across scenarios...")
-        extractor = SequenceExtractor(
-            history_steps=10,
-            future_steps=30,
-            max_distance_to_ego=50.0,
-            min_agent_speed=1.0,
-            step_stride=10,
-        )
-
-        all_samples = []
-        scenarios_parsed = 0
-        max_scenarios_to_process = 60
-
-        for scenario in iter_scenarios(shards, max_scenarios=max_scenarios_to_process):
-            samples = extractor.extract_from_scenario(scenario)
-            all_samples.extend(samples)
-            scenarios_parsed += 1
-            if scenarios_parsed % 10 == 0:
-                print(f"  Parsed {scenarios_parsed} scenarios -> {len(all_samples)} trajectory samples...")
-
-        df_samples = extractor.samples_to_dataframe(all_samples)
-        # Same cleaning, feature and labelling steps as scripts/preprocess_at_scale.py
-        df_samples = PandasFeaturePipeline.clean_and_filter_outliers(df_samples)
-        df_samples = PandasFeaturePipeline.add_vectorized_kinematic_features(df_samples)
-        df_samples = PandasFeaturePipeline.assign_maneuver_labels(df_samples)
-        print(f"✓ Extraction complete: {len(df_samples)} interactive obstacle samples from {scenarios_parsed} scenarios.")
-        df_samples.to_csv(csv_path, index=False)
-        print(f"✓ Saved extracted samples to {csv_path}")
-
-    # 3. Benchmarking Trajectory Predictors & Maneuver Classifiers
-    print("\n[3/5] Benchmarking Trajectory Predictors & Maneuver Classifiers (Physics vs ML)...")
-    df_train, df_test = PandasFeaturePipeline.create_scenario_based_split(df_samples, test_size=0.25, random_state=42)
-
-    print(f"  Train set: {len(df_train)} samples across {df_train['scenario_id'].nunique()} scenarios")
-    print(f"  Test set:  {len(df_test)} samples across {df_test['scenario_id'].nunique()} scenarios")
+    print("\n[2/4] Benchmarking Trajectory Predictors & Maneuver Classifiers (Physics vs ML)...")
 
     # "[global frame]" = first version of the ML predictor (map coordinates, predicts the displacement itself).
     # The others work in the vehicle's own frame and predict the correction to constant velocity.
@@ -126,7 +88,7 @@ def main():
 
     print("\n  🔍 Tuning HistGradientBoosting Regressor via RandomizedSearchCV...")
     tuned_gb, best_params_gb = tune_trajectory_predictor(
-        df_train, model_type="gradient_boosting", n_iter=10, cv=3, random_state=42
+        df_train, model_type="gradient_boosting", n_iter=10, cv=3, random_state=42, df_refit=df_development
     )
     print(f"    ✓ Best Hyperparameters: {best_params_gb}")
     predictors.append(tuned_gb)
@@ -137,10 +99,7 @@ def main():
     for p in predictors:
         if isinstance(p, MLTrajectoryPredictor) and p != tuned_gb:
             print(f"  Training {p.name}...")
-            p.fit(df_train)
-        if isinstance(p, MLTrajectoryPredictor) and p != tuned_gb:
-            print(f"  Training {p.name}...")
-            p.fit(df_train)
+            p.fit(df_development)
             if getattr(p, "frame", "agent") == "agent":
                 trained_models[p.model_type] = p
         elif p == tuned_gb:
@@ -160,8 +119,7 @@ def main():
     cols_to_show = ["model_name", "ade_1s", "fde_1s", "ade_3s", "fde_3s", "mae", "rmse", "r2", "mean_inference_time_ms"]
     print(df_metrics[cols_to_show].to_string(index=False))
 
-    # Scenario-grouped cross-validation: each scenario is tested once, never seen in training
-    print("\n--- 5-fold cross-validation grouped by scenario (final error in metres, mean ± std) ---")
+    print("\n--- 5-fold cross-validation on train + validation, grouped by scenario (final error in metres, mean ± std) ---")
     df_cv = cross_validate_predictors(
         {
             "Constant Velocity (CV)": lambda: ConstantVelocityPredictor(),
@@ -173,7 +131,7 @@ def main():
             "Random Forest": lambda: MLTrajectoryPredictor(model_type="random_forest", n_estimators=60, max_depth=8),
             "Gradient Boosting": lambda: MLTrajectoryPredictor(model_type="gradient_boosting", max_iter=80, max_depth=5),
         },
-        df_samples,
+        df_development,
         n_splits=5,
     )
     print(df_cv.to_string(index=False))
@@ -196,7 +154,7 @@ def main():
     clf_metrics = []
     for clf in classifiers:
         print(f"  Training {clf.name}...")
-        clf.fit(df_train)
+        clf.fit(df_development)
         res = evaluate_maneuver_classifier(clf, df_test)
         clf_metrics.append({
             "Classifier": clf.name,
@@ -209,7 +167,7 @@ def main():
     df_clf_metrics = pd.DataFrame(clf_metrics)
 
     # 4. Multi-Obstacle Closed-Loop Planning Evaluation
-    print("\n[4/5] Running Spatiotemporal A* Speed & Collision Planner (Multi-Obstacle)...")
+    print("\n[3/4] Running Spatiotemporal A* Speed & Collision Planner (Multi-Obstacle)...")
     planner_1d = AStarTrajectoryPlanner(
         horizon_steps=30,  # 3.0 seconds horizon
         dt=0.1,
@@ -423,7 +381,7 @@ def main():
     print(df_plan_summary.to_string(index=False))
 
     # 5. Generate Figures and Artifacts
-    print("\n[5/5] Generating Evaluation Figures and Final Report...")
+    print("\n[4/4] Generating Evaluation Figures and Final Report...")
     figures_dir = ROOT / "reports" / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
 
@@ -468,7 +426,7 @@ def main():
         f.write("# Resultados Experimentais: Prever para Planear (Predict to Plan)\n\n")
         f.write("## 1. Benchmark de Modelos de Predição de Trajetória (Regressão Contínua)\n\n")
         f.write(df_metrics.to_markdown(index=False) + "\n\n")
-        f.write("### Validação cruzada por cenário (5 partes; erro final em metros, média ± desvio-padrão)\n\n")
+        f.write("### Validação cruzada por cenário em treino e validação (5 partes, erro final em metros)\n\n")
         f.write(df_cv.to_markdown(index=False) + "\n\n")
         f.write("## 2. Benchmark de Classificação de Intenção / Manobra (Classificação Multiclasse)\n\n")
         f.write(df_clf_metrics.to_markdown(index=False) + "\n\n")

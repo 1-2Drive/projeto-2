@@ -21,8 +21,8 @@ Uso:
     python scripts/evaluate_planner_cv.py
     python scripts/evaluate_planner_cv.py --csv data/processed/predict_to_plan_samples.csv
 
-Requer o CSV de amostras gerado por `run_predict_to_plan.py` ou por
-`preprocess_at_scale.py` (com as colunas `lead_*` e `future_agent_*`).
+Requer o CSV de amostras gerado por `preprocess_at_scale.py`
+(com as colunas `lead_*` e `future_agent_*`).
 """
 
 import argparse
@@ -135,7 +135,7 @@ def main() -> None:
     df = pd.read_csv(args.csv)
     missing = [c for c in ("lead_gap", "future_agent_dx_3s") if c not in df.columns]
     if missing:
-        sys.exit(f"O CSV não tem as colunas {missing}: volte a gerar as amostras com run_predict_to_plan.py.")
+        sys.exit(f"O CSV não tem as colunas {missing}: volte a gerar as amostras com preprocess_at_scale.py.")
 
     print(f"Amostras: {len(df)} | cenas: {df.scenario_id.nunique()}")
     results = run(df, args.splits)

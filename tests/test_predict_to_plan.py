@@ -8,7 +8,9 @@ Unit tests for the Predict-to-Plan subsystem:
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.model_selection import GroupKFold, RandomizedSearchCV
 
+from scripts.run_predict_to_plan import load_benchmark_splits
 from src.features.pandas_feature_pipeline import PandasFeaturePipeline
 from src.models.trajectory_predictor import (
     ConstantAccelerationPredictor,
@@ -346,24 +348,53 @@ def test_regression_metrics_mae_rmse_r2(mock_trajectory_df):
     assert metrics.rmse_3s >= 0.0
 
 
-def test_tune_trajectory_predictor(mock_trajectory_df):
-    train_df = mock_trajectory_df.iloc[:60]
-    test_df = mock_trajectory_df.iloc[60:]
+@pytest.mark.parametrize("model_type", ["gradient_boosting", "random_forest"])
+def test_tune_trajectory_predictor(mock_trajectory_df, monkeypatch, model_type):
+    train_df = mock_trajectory_df.iloc[:60].copy()
+    train_df.loc[train_df.index[0], ["future_dx_3s", "future_dy_3s"]] = np.nan
+    validation_df = mock_trajectory_df.iloc[60:80]
+    test_df = mock_trajectory_df.iloc[80:]
+    original_fit = RandomizedSearchCV.fit
+
+    def check_search_groups(search, X, y, *, groups):
+        assert isinstance(search.cv, GroupKFold)
+        assert groups.tolist() == train_df["scenario_id"].iloc[1:].tolist()
+        return original_fit(search, X, y, groups=groups)
+
+    monkeypatch.setattr(RandomizedSearchCV, "fit", check_search_groups)
 
     tuned_model, best_params = tune_trajectory_predictor(
         train_df,
-        model_type="gradient_boosting",
-        n_iter=3,
+        model_type=model_type,
+        n_iter=1,
         cv=2,
-        random_state=42,
+        random_state=17,
+        df_refit=pd.concat([train_df, validation_df]),
     )
-    assert tuned_model is not None
-    assert isinstance(best_params, dict)
-    assert "max_depth" in best_params or "max_iter" in best_params
+    assert best_params
+    for model in tuned_model.models.values():
+        estimator = model.estimator if model_type == "gradient_boosting" else model
+        actual_params = estimator.get_params()
+        assert {key: actual_params[key] for key in best_params} == best_params
+        assert actual_params["random_state"] == 17
 
     metrics, _ = evaluate_trajectory_predictor(tuned_model, test_df)
     assert metrics.mae >= 0.0
     assert metrics.ade_3s >= 0.0
+
+
+def test_load_benchmark_splits_preserves_held_out_scenarios(tmp_path):
+    for name, ids in [("train", ["001", "001"]), ("val", ["002"]), ("test", ["003"])]:
+        pd.DataFrame({"scenario_id": ids}).to_csv(tmp_path / f"{name}.csv", index=False)
+
+    train, val, test = load_benchmark_splits(tmp_path)
+    assert train["scenario_id"].tolist() == ["001", "001"]
+    assert val["scenario_id"].tolist() == ["002"]
+    assert test["scenario_id"].tolist() == ["003"]
+
+    val.to_csv(tmp_path / "test.csv", index=False)
+    with pytest.raises(ValueError, match=r"val\.csv and test\.csv share"):
+        load_benchmark_splits(tmp_path)
 
 
 def test_spatiotemporal_2d_frenet_astar_evasion():

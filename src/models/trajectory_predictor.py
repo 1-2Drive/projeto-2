@@ -25,7 +25,7 @@ from sklearn.metrics import (
     mean_squared_error,
     r2_score,
 )
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import GroupKFold, RandomizedSearchCV
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.tree import DecisionTreeRegressor
@@ -182,18 +182,22 @@ class MLTrajectoryPredictor(BasePredictor):
             return RandomForestRegressor(
                 n_estimators=kwargs.get("n_estimators", 50),
                 max_depth=kwargs.get("max_depth", 10),
-                random_state=42,
+                min_samples_split=kwargs.get("min_samples_split", 2),
+                min_samples_leaf=kwargs.get("min_samples_leaf", 1),
+                max_features=kwargs.get("max_features", 1.0),
+                random_state=kwargs.get("random_state", 42),
                 n_jobs=-1,
             )
         if self.model_type == "knn":
             return KNeighborsRegressor(n_neighbors=kwargs.get("n_neighbors", 7), n_jobs=-1)
         # gradient_boosting: HistGradientBoosting predicts one output at a time
-        from sklearn.multioutput import MultiOutputRegressor
         base_gb = HistGradientBoostingRegressor(
             max_iter=kwargs.get("max_iter", 100),
             max_depth=kwargs.get("max_depth", 6),
             learning_rate=kwargs.get("learning_rate", 0.1),
-            random_state=42,
+            min_samples_leaf=kwargs.get("min_samples_leaf", 20),
+            l2_regularization=kwargs.get("l2_regularization", 0.0),
+            random_state=kwargs.get("random_state", 42),
         )
         return MultiOutputRegressor(base_gb, n_jobs=-1)
 
@@ -341,22 +345,23 @@ def tune_trajectory_predictor(
     n_iter: int = 15,
     cv: int = 3,
     random_state: int = 42,
+    *,
+    df_refit: Optional[pd.DataFrame] = None,
 ) -> Tuple[MLTrajectoryPredictor, Dict[str, Any]]:
     """
-    Performs hyperparameter optimization using RandomizedSearchCV on trajectory regressors.
-    Optimizes for negative Mean Absolute Error (neg_mean_absolute_error).
+    Optimizes 3s displacement MAE using scenario-grouped cross-validation.
+    Fits the chosen configuration at every horizon on df_refit, or df_train if omitted.
     Returns: (tuned_predictor, best_parameters_dict)
     """
-    sample_predictor = MLTrajectoryPredictor(model_type=model_type)
+    sample_predictor = MLTrajectoryPredictor(model_type=model_type, random_state=random_state)
     X = sample_predictor._features(df_train)
     y = sample_predictor._targets(df_train, horizon=3)
     valid = ~np.isnan(y).any(axis=1)
-    X_valid, y_valid = X[valid], y[valid]
+    groups = df_train.loc[valid, "scenario_id"]
+    if groups.isna().any() or groups.nunique() < cv:
+        raise ValueError(f"Tuning requires at least {cv} distinct scenario IDs with valid 3s targets and no missing IDs.")
 
     if model_type == "gradient_boosting":
-        base_estimator = MultiOutputRegressor(
-            HistGradientBoostingRegressor(random_state=random_state)
-        )
         param_distributions = {
             "estimator__learning_rate": [0.03, 0.05, 0.08, 0.1, 0.15],
             "estimator__max_iter": [50, 80, 100, 150],
@@ -365,7 +370,6 @@ def tune_trajectory_predictor(
             "estimator__l2_regularization": [0.0, 0.1, 1.0, 5.0],
         }
     elif model_type == "random_forest":
-        base_estimator = RandomForestRegressor(random_state=random_state, n_jobs=-1)
         param_distributions = {
             "n_estimators": [40, 60, 80, 100],
             "max_depth": [6, 8, 10, 12, None],
@@ -377,28 +381,27 @@ def tune_trajectory_predictor(
         raise ValueError(f"Tuning not implemented for model_type: {model_type}")
 
     search = RandomizedSearchCV(
-        estimator=base_estimator,
+        estimator=sample_predictor._new_model(),
         param_distributions=param_distributions,
         n_iter=n_iter,
-        cv=cv,
+        cv=GroupKFold(n_splits=cv),
         scoring="neg_mean_absolute_error",
         random_state=random_state,
         n_jobs=-1,
-        refit=True,
+        refit=False,
     )
-    search.fit(X_valid, y_valid)
+    search.fit(X[valid], y[valid], groups=groups)
 
     # Clean param dict
-    best_params = {
-        k.replace("estimator__", ""): v for k, v in search.best_params_.items()
-    }
+    best_params = {key.removeprefix("estimator__"): value for key, value in search.best_params_.items()}
 
     best_predictor = MLTrajectoryPredictor(
         model_type=model_type,
-        name=f"Tuned {model_type.replace('_', ' ').title()}",
+        random_state=random_state,
         **best_params,
     )
-    best_predictor.fit(df_train)
+    best_predictor.name = f"Tuned {best_predictor.name}"
+    best_predictor.fit(df_train if df_refit is None else df_refit)
 
     return best_predictor, best_params
 
@@ -412,8 +415,6 @@ def cross_validate_predictors(
     predictor_factories maps a label to a function that builds a fresh predictor.
     Returns the mean and the standard deviation (across folds) of the final error at 1s, 3s, 5s.
     """
-    from sklearn.model_selection import GroupKFold
-
     groups = df["scenario_id"].to_numpy()
     rows = []
     for label, factory in predictor_factories.items():
