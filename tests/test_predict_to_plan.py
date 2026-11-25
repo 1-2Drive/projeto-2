@@ -17,9 +17,12 @@ from src.models.trajectory_predictor import (
     MLTrajectoryPredictor,
     evaluate_maneuver_classifier,
     evaluate_trajectory_predictor,
+    tune_trajectory_predictor,
 )
 from src.planning.astar_planner import (
     AStarTrajectoryPlanner,
+    DijkstraTrajectoryPlanner,
+    GreedyTrajectoryPlanner,
     check_obb_collision,
     compute_wilson_score_interval,
 )
@@ -256,5 +259,88 @@ def test_compute_wilson_score_interval():
     rate, lower, upper = compute_wilson_score_interval(50, 100)
     assert rate == 50.0
     assert 40.0 <= lower < 50.0 < upper <= 60.0
+
+
+def test_regression_metrics_mae_rmse_r2(mock_trajectory_df):
+    train_df = mock_trajectory_df.iloc[:70]
+    test_df = mock_trajectory_df.iloc[70:]
+
+    pred = MLTrajectoryPredictor(model_type="decision_tree", max_depth=4)
+    pred.fit(train_df)
+    metrics, preds = evaluate_trajectory_predictor(pred, test_df)
+
+    assert metrics.mae >= 0.0
+    assert metrics.rmse >= 0.0
+    assert -10.0 <= metrics.r2 <= 1.0
+    assert metrics.mae_3s >= 0.0
+    assert metrics.rmse_3s >= 0.0
+
+
+def test_tune_trajectory_predictor(mock_trajectory_df):
+    train_df = mock_trajectory_df.iloc[:60]
+    test_df = mock_trajectory_df.iloc[60:]
+
+    tuned_model, best_params = tune_trajectory_predictor(
+        train_df,
+        model_type="gradient_boosting",
+        n_iter=3,
+        cv=2,
+        random_state=42,
+    )
+    assert tuned_model is not None
+    assert isinstance(best_params, dict)
+    assert "max_depth" in best_params or "max_iter" in best_params
+
+    metrics, _ = evaluate_trajectory_predictor(tuned_model, test_df)
+    assert metrics.mae >= 0.0
+    assert metrics.ade_3s >= 0.0
+
+
+def test_spatiotemporal_2d_frenet_astar_evasion():
+    path_len = 60.0
+    s_pts = np.linspace(0, path_len, 60)
+    ego_path = np.column_stack([s_pts, np.zeros_like(s_pts)])
+
+    # Stationary obstacle right in the center lane at s=25m
+    obs = {1: [(25.0, 0.0)] * 31}
+    planner = AStarTrajectoryPlanner(horizon_steps=30, dt=0.1, max_speed=15.0)
+
+    # 1D A* along centerline cannot evade laterally, must slow down/stop
+    s_1d, v_1d, a_1d = planner.plan_trajectory(8.0, ego_path, obs)
+    res_1d = planner.evaluate_plan_against_ground_truth(
+        mode="1D", ego_path_xy=ego_path, s_traj=s_1d, v_traj=v_1d, a_traj=a_1d, gt_obstacles=obs
+    )
+
+    # 2D Frenet A* can change lane (evade laterally)
+    s_2d, v_2d, a_2d, d_2d = planner.plan_trajectory_2d(
+        ego_init_v=8.0, ego_path_xy=ego_path, predicted_obstacles=obs
+    )
+    res_2d = planner.evaluate_plan_against_ground_truth(
+        mode="2D_Frenet", ego_path_xy=ego_path, s_traj=s_2d, v_traj=v_2d, a_traj=a_2d, gt_obstacles=obs, d_traj=d_2d
+    )
+
+    assert len(s_2d) == 31
+    assert len(d_2d) == 31
+    # 2D planner executed a lateral maneuver
+    assert res_2d.max_lateral_displacement > 0.5
+    # 2D planner maintained higher speed / progress than 1D
+    assert res_2d.total_travel_distance >= res_1d.total_travel_distance
+
+
+def test_planning_baselines_dijkstra_and_greedy():
+    ego_path = np.column_stack([np.linspace(0, 50, 50), np.zeros(50)])
+    obs = {1: [(20.0, 0.0)] * 31}
+
+    dijkstra = DijkstraTrajectoryPlanner(horizon_steps=20, dt=0.1)
+    greedy = GreedyTrajectoryPlanner(horizon_steps=20, dt=0.1)
+
+    s_d, v_d, a_d = dijkstra.plan_trajectory(8.0, ego_path, obs)
+    s_g, v_g, a_g = greedy.plan_trajectory(8.0, ego_path, obs)
+
+    assert len(s_d) == 21
+    assert len(s_g) == 21
+    assert dijkstra.last_expansions > 0
+    assert greedy.last_expansions > 0
+
 
 

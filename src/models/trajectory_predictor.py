@@ -17,7 +17,16 @@ from sklearn.ensemble import (
     RandomForestClassifier,
     RandomForestRegressor,
 )
-from sklearn.metrics import accuracy_score, classification_report, f1_score
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    f1_score,
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+)
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.multioutput import MultiOutputRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.tree import DecisionTreeRegressor
 
@@ -35,6 +44,12 @@ class PredictionMetrics:
     ade_5s: float
     fde_5s: float
     mean_inference_time_ms: float
+    mae: float = 0.0
+    rmse: float = 0.0
+    r2: float = 0.0
+    mae_3s: float = 0.0
+    rmse_3s: float = 0.0
+    r2_3s: float = 0.0
 
 
 class BasePredictor:
@@ -190,6 +205,19 @@ def evaluate_trajectory_predictor(
     ade_3s = float(np.mean((err_1s + err_3s) / 2.0))
     ade_5s = float(np.mean((err_1s + err_3s + err_5s) / 3.0))
 
+    gt_all = np.column_stack([gt_1s, gt_3s, gt_5s])
+    preds_all = np.column_stack([preds["1s"], preds["3s"], preds["5s"]])
+
+    # Global regression metrics across all displacement components
+    mae_global = float(mean_absolute_error(gt_all, preds_all))
+    rmse_global = float(np.sqrt(mean_squared_error(gt_all, preds_all)))
+    r2_global = float(r2_score(gt_all, preds_all))
+
+    # Horizon-specific metrics at 3.0s (planning horizon target)
+    mae_3s = float(mean_absolute_error(gt_3s, preds["3s"]))
+    rmse_3s = float(np.sqrt(mean_squared_error(gt_3s, preds["3s"])))
+    r2_3s = float(r2_score(gt_3s, preds["3s"]))
+
     metrics = PredictionMetrics(
         model_name=getattr(predictor, "name", type(predictor).__name__),
         ade_1s=round(ade_1s, 3),
@@ -199,8 +227,77 @@ def evaluate_trajectory_predictor(
         ade_5s=round(ade_5s, 3),
         fde_5s=round(fde_5s, 3),
         mean_inference_time_ms=round(latency_ms, 4),
+        mae=round(mae_global, 3),
+        rmse=round(rmse_global, 3),
+        r2=round(r2_global, 3),
+        mae_3s=round(mae_3s, 3),
+        rmse_3s=round(rmse_3s, 3),
+        r2_3s=round(r2_3s, 3),
     )
     return metrics, preds
+
+
+def tune_trajectory_predictor(
+    df_train: pd.DataFrame,
+    model_type: str = "gradient_boosting",
+    n_iter: int = 15,
+    cv: int = 3,
+    random_state: int = 42,
+) -> Tuple[MLTrajectoryPredictor, Dict[str, Any]]:
+    """
+    Performs hyperparameter optimization using RandomizedSearchCV on trajectory regressors.
+    Optimizes for negative Mean Absolute Error (neg_mean_absolute_error).
+    Returns: (tuned_predictor, best_parameters_dict)
+    """
+    X = df_train[MLTrajectoryPredictor.FEATURE_COLS].to_numpy()
+    y = df_train[MLTrajectoryPredictor.TARGET_COLS].to_numpy()
+
+    if model_type == "gradient_boosting":
+        base_estimator = MultiOutputRegressor(
+            HistGradientBoostingRegressor(random_state=random_state)
+        )
+        param_distributions = {
+            "estimator__learning_rate": [0.03, 0.05, 0.08, 0.1, 0.15],
+            "estimator__max_iter": [50, 80, 100, 150],
+            "estimator__max_depth": [4, 5, 6, 8],
+            "estimator__min_samples_leaf": [15, 20, 30, 50],
+            "estimator__l2_regularization": [0.0, 0.1, 1.0, 5.0],
+        }
+    elif model_type == "random_forest":
+        base_estimator = RandomForestRegressor(random_state=random_state, n_jobs=-1)
+        param_distributions = {
+            "n_estimators": [40, 60, 80, 100],
+            "max_depth": [6, 8, 10, 12, None],
+            "min_samples_split": [2, 5, 10],
+            "min_samples_leaf": [1, 2, 4],
+            "max_features": ["sqrt", 1.0],
+        }
+    else:
+        raise ValueError(f"Tuning not implemented for model_type: {model_type}")
+
+    search = RandomizedSearchCV(
+        estimator=base_estimator,
+        param_distributions=param_distributions,
+        n_iter=n_iter,
+        cv=cv,
+        scoring="neg_mean_absolute_error",
+        random_state=random_state,
+        n_jobs=-1,
+        refit=True,
+    )
+    search.fit(X, y)
+
+    best_predictor = MLTrajectoryPredictor(
+        model_type=model_type,
+        name=f"Tuned {model_type.replace('_', ' ').title()}",
+    )
+    best_predictor.model = search.best_estimator_
+
+    # Clean param dict
+    best_params = {
+        k.replace("estimator__", ""): v for k, v in search.best_params_.items()
+    }
+    return best_predictor, best_params
 
 
 class ManeuverClassifier:

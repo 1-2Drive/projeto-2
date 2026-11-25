@@ -31,9 +31,12 @@ from src.models.trajectory_predictor import (
     MLTrajectoryPredictor,
     evaluate_maneuver_classifier,
     evaluate_trajectory_predictor,
+    tune_trajectory_predictor,
 )
 from src.planning.astar_planner import (
     AStarTrajectoryPlanner,
+    DijkstraTrajectoryPlanner,
+    GreedyTrajectoryPlanner,
     compute_wilson_score_interval,
 )
 
@@ -102,22 +105,37 @@ def main():
         MLTrajectoryPredictor(model_type="gradient_boosting", max_iter=80, max_depth=5),
     ]
 
+    print("\n  🔍 Tuning HistGradientBoosting Regressor via RandomizedSearchCV...")
+    tuned_gb, best_params_gb = tune_trajectory_predictor(
+        df_train, model_type="gradient_boosting", n_iter=10, cv=3, random_state=42
+    )
+    print(f"    ✓ Best Hyperparameters: {best_params_gb}")
+    predictors.append(tuned_gb)
+
     metrics_list = []
     trained_models = {}
 
     for p in predictors:
-        if isinstance(p, MLTrajectoryPredictor):
+        if isinstance(p, MLTrajectoryPredictor) and p != tuned_gb:
             print(f"  Training {p.name}...")
             p.fit(df_train)
             trained_models[p.model_type] = p
+        elif p == tuned_gb:
+            trained_models["tuned_gradient_boosting"] = tuned_gb
 
         metrics, preds = evaluate_trajectory_predictor(p, df_test)
         metrics_list.append(metrics)
-        print(f"    -> {metrics.model_name}: ADE@3s = {metrics.ade_3s:.3f}m | FDE@3s = {metrics.fde_3s:.3f}m | Latency = {metrics.mean_inference_time_ms:.3f}ms")
+        print(
+            f"    -> {metrics.model_name}: "
+            f"ADE@3s = {metrics.ade_3s:.3f}m | FDE@3s = {metrics.fde_3s:.3f}m | "
+            f"MAE = {metrics.mae:.3f}m | RMSE = {metrics.rmse:.3f}m | R² = {metrics.r2:.3f} | "
+            f"Latency = {metrics.mean_inference_time_ms:.3f}ms"
+        )
 
     df_metrics = pd.DataFrame([m.__dict__ for m in metrics_list])
-    print("\n--- ML Trajectory Prediction Benchmark Results ---")
-    print(df_metrics.to_string(index=False))
+    print("\n--- ML Trajectory Prediction Benchmark Results (Standard & Regression Metrics) ---")
+    cols_to_show = ["model_name", "ade_1s", "fde_1s", "ade_3s", "fde_3s", "mae", "rmse", "r2", "mean_inference_time_ms"]
+    print(df_metrics[cols_to_show].to_string(index=False))
 
     # Feature Importance analysis
     rf_model = trained_models.get("random_forest")
@@ -150,15 +168,42 @@ def main():
 
     # 4. Multi-Obstacle Closed-Loop Planning Evaluation
     print("\n[4/5] Running Spatiotemporal A* Speed & Collision Planner (Multi-Obstacle)...")
-    planner = AStarTrajectoryPlanner(
+    planner_1d = AStarTrajectoryPlanner(
         horizon_steps=30,  # 3.0 seconds horizon
+        dt=0.1,
+        max_speed=18.0,
+        safety_radius=3.5,
+    )
+    planner_2d = AStarTrajectoryPlanner(
+        horizon_steps=30,
+        dt=0.1,
+        max_speed=18.0,
+        safety_radius=3.5,
+        max_expansions=3000,
+    )
+    planner_dijkstra = DijkstraTrajectoryPlanner(
+        horizon_steps=30,
+        dt=0.1,
+        max_speed=18.0,
+        safety_radius=3.5,
+    )
+    planner_greedy = GreedyTrajectoryPlanner(
+        horizon_steps=30,
         dt=0.1,
         max_speed=18.0,
         safety_radius=3.5,
     )
 
     # Evaluate closed-loop planning across test scenarios
-    plan_modes = ["Uninformed (Reactive)", "Constant Velocity", "ML Predicted (Random Forest)", "Oracle (Ground Truth)"]
+    plan_modes = [
+        "Uninformed (1D Reactive)",
+        "Constant Velocity (1D)",
+        "ML Predicted (1D A*)",
+        "ML Predicted (2D Frenet A*)",
+        "Dijkstra Baseline (1D, h=0)",
+        "Greedy Baseline (1D, f=h)",
+        "Oracle (1D Ground Truth)",
+    ]
     planning_results = {mode: [] for mode in plan_modes}
 
     # Group test samples by (scenario_id, current_time_step) to find multi-obstacle scenes
@@ -229,12 +274,13 @@ def main():
             cv_obs[tid] = [(ox0 + ovx * (step * 0.1), oy0 + ovy * (step * 0.1)) for step in range(31)]
 
             # 4) ML Predicted trajectory (piecewise 1s and 3s predictions)
-            if rf_model is not None:
-                rf_p = rf_model.predict_displacements(pd.DataFrame([obs_row]))
-                m1_x = ox0 + float(rf_p["1s"][0, 0])
-                m1_y = oy0 + float(rf_p["1s"][0, 1])
-                m3_x = ox0 + float(rf_p["3s"][0, 0])
-                m3_y = oy0 + float(rf_p["3s"][0, 1])
+            active_ml = trained_models.get("tuned_gradient_boosting") or rf_model
+            if active_ml is not None:
+                ml_p = active_ml.predict_displacements(pd.DataFrame([obs_row]))
+                m1_x = ox0 + float(ml_p["1s"][0, 0])
+                m1_y = oy0 + float(ml_p["1s"][0, 1])
+                m3_x = ox0 + float(ml_p["3s"][0, 0])
+                m3_y = oy0 + float(ml_p["3s"][0, 1])
                 ml_traj = []
                 for step in range(31):
                     if step <= 10:
@@ -247,21 +293,23 @@ def main():
             else:
                 ml_obs[tid] = cv_obs[tid]
 
-        # Plan for each modality
-        configs = [
-            ("Uninformed (Reactive)", uninformed_obs),
-            ("Constant Velocity", cv_obs),
-            ("ML Predicted (Random Forest)", ml_obs),
-            ("Oracle (Ground Truth)", gt_obstacles),
+        # 1D A* configurations
+        configs_1d = [
+            ("Uninformed (1D Reactive)", planner_1d, uninformed_obs),
+            ("Constant Velocity (1D)", planner_1d, cv_obs),
+            ("ML Predicted (1D A*)", planner_1d, ml_obs),
+            ("Dijkstra Baseline (1D, h=0)", planner_dijkstra, ml_obs),
+            ("Greedy Baseline (1D, f=h)", planner_greedy, ml_obs),
+            ("Oracle (1D Ground Truth)", planner_1d, gt_obstacles),
         ]
 
-        for mode_name, pred_obs in configs:
-            s_tr, v_tr, a_tr = planner.plan_trajectory(
+        for mode_name, pl, pred_obs in configs_1d:
+            s_tr, v_tr, a_tr = pl.plan_trajectory(
                 ego_init_v=ego_v,
                 ego_path_xy=ego_path,
                 predicted_obstacles=pred_obs,
             )
-            res = planner.evaluate_plan_against_ground_truth(
+            res = pl.evaluate_plan_against_ground_truth(
                 mode=mode_name,
                 ego_path_xy=ego_path,
                 s_traj=s_tr,
@@ -273,6 +321,29 @@ def main():
                 obb_safety_margin=0.1,
             )
             planning_results[mode_name].append(res)
+
+        # 2D Frenet Spatiotemporal A* with Lateral Evasion
+        s_2d, v_2d, a_2d, d_2d = planner_2d.plan_trajectory_2d(
+            ego_init_v=ego_v,
+            ego_path_xy=ego_path,
+            predicted_obstacles=ml_obs,
+            lat_options=[-1.5, 0.0, 1.5],
+            gt_headings=gt_headings,
+            use_obb=True,
+        )
+        res_2d = planner_2d.evaluate_plan_against_ground_truth(
+            mode="ML Predicted (2D Frenet A*)",
+            ego_path_xy=ego_path,
+            s_traj=s_2d,
+            v_traj=v_2d,
+            a_traj=a_2d,
+            gt_obstacles=gt_obstacles,
+            ego_heading=ego_heading,
+            gt_headings=gt_headings,
+            obb_safety_margin=0.1,
+            d_traj=d_2d,
+        )
+        planning_results["ML Predicted (2D Frenet A*)"].append(res_2d)
 
     # Summarize planning results
     plan_summary_rows = []
@@ -289,15 +360,20 @@ def main():
         avg_min_dist = float(np.mean([r.min_distance_to_obstacle for r in results]))
         avg_emergency = float(np.mean([r.emergency_braking_events for r in results]))
         avg_speed = float(np.mean([r.average_speed for r in results]))
+        avg_lat = float(np.mean([r.max_lateral_displacement for r in results]))
+        avg_exp = float(np.mean([r.expansions for r in results]))
+        avg_lat_ms = float(np.mean([r.planning_time_ms for r in results]))
 
         plan_summary_rows.append({
             "Planning Modality": mode_name,
             "Scenarios Tested": total_runs,
             "OBB Collision Rate (%)": f"{obb_rate:.1f}% [{obb_lower:.1f}, {obb_upper:.1f}]",
             "Clearance < 3.5m (%)": f"{circle_rate:.1f}% [{circ_lower:.1f}, {circ_upper:.1f}]",
-            "Min Clearance (m)": round(avg_min_dist, 2),
             "Emergency Decels / Run": round(avg_emergency, 2),
             "Avg Speed (m/s)": round(avg_speed, 2),
+            "Max Lateral (m)": round(avg_lat, 2),
+            "Expansions": round(avg_exp, 1),
+            "Latency (ms)": round(avg_lat_ms, 2),
         })
 
     df_plan_summary = pd.DataFrame(plan_summary_rows)
