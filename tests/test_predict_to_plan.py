@@ -59,6 +59,9 @@ def mock_trajectory_df():
         "past_dy_1s": np.random.uniform(0, 3, n),
         "past_speed_mean": np.random.uniform(2, 10, n),
         "past_heading_change": np.random.uniform(-0.1, 0.1, n),
+        "lead_gap": np.random.uniform(2, 100, n),
+        "lead_speed": np.random.uniform(0, 12, n),
+        "lead_closing_speed": np.random.uniform(-3, 3, n),
         "closing_speed": np.random.uniform(-2, 4, n),
         "ttc": np.random.uniform(5, 50, n),
         "azimuth_angle": np.random.uniform(-np.pi, np.pi, n),
@@ -114,7 +117,62 @@ def test_ml_trajectory_predictor_rf(mock_trajectory_df):
     assert metrics.ade_3s < 10.0  # Reasonable error on synthetic data
     importances = predictor.get_feature_importances()
     assert importances is not None
-    assert len(importances) == len(MLTrajectoryPredictor.FEATURE_COLS)
+    assert len(importances) == len(predictor.feature_cols)
+
+
+def test_ml_trajectory_predictor_first_version_still_available(mock_trajectory_df):
+    """frame="global", residual=False reproduces the first version (map frame, raw displacement)."""
+    predictor = MLTrajectoryPredictor(
+        model_type="random_forest", frame="global", residual=False, n_estimators=20, max_depth=5
+    )
+    predictor.fit(mock_trajectory_df.iloc[:70])
+    assert predictor.feature_cols == PandasFeaturePipeline.FEATURE_COLS
+    assert predictor.predict_displacements(mock_trajectory_df.iloc[70:])["5s"].shape == (30, 2)
+
+
+def _rotate_scene(df, angle):
+    """Rotates every global-frame column of the samples by `angle` (the scene seen from another compass direction)."""
+    out = df.copy()
+    c, s = np.cos(angle), np.sin(angle)
+    for x_col, y_col in [
+        ("agent_vx", "agent_vy"), ("past_dx_1s", "past_dy_1s"),
+        ("future_dx_1s", "future_dy_1s"), ("future_dx_3s", "future_dy_3s"), ("future_dx_5s", "future_dy_5s"),
+    ]:
+        x, y = df[x_col].to_numpy(), df[y_col].to_numpy()
+        out[x_col], out[y_col] = c * x - s * y, s * x + c * y
+    out["agent_heading"] = df["agent_heading"] + angle
+    out["ego_heading"] = df["ego_heading"] + angle
+    return out
+
+
+def test_agent_frame_prediction_does_not_depend_on_compass_direction(mock_trajectory_df):
+    """
+    Turning the whole scene by 90 degrees must turn the predictions by 90 degrees and nothing else:
+    a vehicle going north and one going east are the same case for the agent-frame model.
+    """
+    train_df = mock_trajectory_df.iloc[:70]
+    test_df = mock_trajectory_df.iloc[70:]
+    angle = np.pi / 2
+
+    predictor = MLTrajectoryPredictor(model_type="random_forest", n_estimators=20, max_depth=5).fit(train_df)
+    preds = predictor.predict_displacements(test_df)["3s"]
+    preds_rotated_scene = predictor.predict_displacements(_rotate_scene(test_df, angle))["3s"]
+
+    c, s = np.cos(angle), np.sin(angle)
+    expected = np.column_stack([c * preds[:, 0] - s * preds[:, 1], s * preds[:, 0] + c * preds[:, 1]])
+    assert np.allclose(preds_rotated_scene, expected, atol=1e-6)
+
+
+def test_missing_5s_target_is_ignored_not_invented(mock_trajectory_df):
+    """Samples without a real 5s future (NaN) are skipped for the 5s model and the 5s metrics."""
+    df = mock_trajectory_df.copy()
+    df.loc[df.index[::4], ["future_dx_5s", "future_dy_5s"]] = np.nan
+
+    predictor = MLTrajectoryPredictor(model_type="random_forest", n_estimators=20, max_depth=5).fit(df.iloc[:70])
+    metrics, preds = evaluate_trajectory_predictor(predictor, df.iloc[70:])
+
+    assert not np.isnan(preds["5s"]).any()
+    assert np.isfinite(metrics.fde_5s) and np.isfinite(metrics.ade_5s)
 
 
 def test_ml_trajectory_predictor_dt(mock_trajectory_df):
@@ -212,6 +270,18 @@ def test_pandas_feature_pipeline_split(mock_trajectory_df):
     test_scenarios = set(df_test["scenario_id"].unique())
     # Zero leakage between scenarios
     assert len(train_scenarios.intersection(test_scenarios)) == 0
+
+
+
+def test_predictor_accepts_samples_without_lead_columns(mock_trajectory_df):
+    """Tables extracted before the lead-vehicle features existed must still train and predict."""
+    old_table = mock_trajectory_df.drop(columns=["lead_gap", "lead_speed", "lead_closing_speed"])
+    with pytest.warns(UserWarning, match="Lead-vehicle columns are missing"):
+        predictor = MLTrajectoryPredictor(model_type="decision_tree", max_depth=3).fit(old_table)
+    with pytest.warns(UserWarning):
+        displacements = predictor.predict_displacements(old_table)
+    assert displacements["3s"].shape == (len(old_table), 2)
+    assert np.isfinite(displacements["3s"]).all()
 
 
 def test_check_obb_collision_sat():

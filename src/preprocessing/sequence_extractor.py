@@ -40,7 +40,12 @@ class TrajectorySample:
     past_dy_1s: float
     past_speed_mean: float
     past_heading_change: float
-    # Future displacement ground truth (1s = 10 steps, 3s = 30 steps, 5s = 50 steps)
+    # Road user directly ahead of the agent, in the agent's own lane corridor
+    lead_gap: float
+    lead_speed: float
+    lead_closing_speed: float
+    # Future displacement ground truth (1s = 10 steps, 3s = 30 steps, 5s = 50 steps).
+    # The 5s values are NaN when the agent is not observed 5s later (never extrapolated).
     future_dx_1s: float
     future_dy_1s: float
     future_dx_3s: float
@@ -61,6 +66,11 @@ class SequenceExtractor:
     Extracts structured ML samples from scenario protobuf objects.
     Filters for relevant dynamic obstacle vehicles in the ego vehicle's neighborhood.
     """
+
+    # "Vehicle ahead" search corridor, in the agent's own frame
+    LEAD_MAX_DISTANCE = 60.0   # metres ahead
+    LEAD_HALF_WIDTH = 1.8      # metres to each side (about half a lane)
+    LEAD_NONE_GAP = 100.0      # gap reported when nobody is ahead
 
     def __init__(
         self,
@@ -116,6 +126,17 @@ class SequenceExtractor:
             ego_vy = sdc_state.velocity_y
             ego_speed = float(np.hypot(ego_vx, ego_vy))
 
+            # Snapshot of every vehicle and cyclist observed at this instant (ego included).
+            # Used to find who is driving directly ahead of each agent.
+            snap = [
+                (i, tr.states[t_curr]) for i, tr in enumerate(tracks)
+                if tr.object_type in (1, 3) and tr.states[t_curr].valid
+            ]
+            snap_idx = np.array([i for i, _ in snap])
+            snap_xy = np.array([[st.center_x, st.center_y] for _, st in snap])
+            snap_vel = np.array([[st.velocity_x, st.velocity_y] for _, st in snap])
+            snap_len = np.array([st.length for _, st in snap])
+
             # Iterate over all non-SDC tracks (focusing on vehicles: object_type == 1)
             for idx, track in enumerate(tracks):
                 if idx == sdc_index:
@@ -150,7 +171,7 @@ class SequenceExtractor:
                 # Check future validity (at least at 1s, 3s)
                 t_1s = t_curr + 10
                 t_3s = t_curr + 30
-                t_5s = min(t_curr + 50, num_steps - 1)
+                t_5s = t_curr + 50
 
                 if not (states[t_1s].valid and states[t_3s].valid):
                     continue
@@ -187,16 +208,39 @@ class SequenceExtractor:
                 fut_dx_3s = states[t_3s].center_x - curr_st.center_x
                 fut_dy_3s = states[t_3s].center_y - curr_st.center_y
 
-                if states[t_5s].valid:
+                # The 5s target only exists when the agent is really observed 5s later.
+                # Otherwise it is left empty (NaN): no extrapolation and no shorter horizon.
+                if t_5s < num_steps and states[t_5s].valid:
                     fut_dx_5s = states[t_5s].center_x - curr_st.center_x
                     fut_dy_5s = states[t_5s].center_y - curr_st.center_y
                 else:
-                    fut_dx_5s = fut_dx_3s * (5.0 / 3.0)
-                    fut_dy_5s = fut_dy_3s * (5.0 / 3.0)
+                    fut_dx_5s = float("nan")
+                    fut_dy_5s = float("nan")
 
                 # Agent-relative future displacements (rotated into agent's heading)
                 cos_ag = np.cos(curr_st.heading)
                 sin_ag = np.sin(curr_st.heading)
+
+                # Road user directly ahead of this agent (in the agent's own frame)
+                d_xy = snap_xy - np.array([curr_st.center_x, curr_st.center_y])
+                lon = cos_ag * d_xy[:, 0] + sin_ag * d_xy[:, 1]
+                lat = -sin_ag * d_xy[:, 0] + cos_ag * d_xy[:, 1]
+                ahead = (
+                    (snap_idx != idx)
+                    & (lon > 1.0)
+                    & (lon < self.LEAD_MAX_DISTANCE)
+                    & (np.abs(lat) < self.LEAD_HALF_WIDTH)
+                )
+                agent_v_lon = cos_ag * agent_vx + sin_ag * agent_vy
+                if ahead.any():
+                    j = int(np.argmin(np.where(ahead, lon, np.inf)))
+                    lead_gap = float(max(lon[j] - 0.5 * (curr_st.length + snap_len[j]), 0.0))
+                    lead_speed = float(cos_ag * snap_vel[j, 0] + sin_ag * snap_vel[j, 1])
+                    lead_closing_speed = float(agent_v_lon - lead_speed)
+                else:
+                    lead_gap = self.LEAD_NONE_GAP
+                    lead_speed = float(agent_v_lon)
+                    lead_closing_speed = 0.0
 
                 fut_ag_dx_1s = cos_ag * fut_dx_1s + sin_ag * fut_dy_1s
                 fut_ag_dy_1s = -sin_ag * fut_dx_1s + cos_ag * fut_dy_1s
@@ -230,6 +274,9 @@ class SequenceExtractor:
                     past_dy_1s=past_dy,
                     past_speed_mean=past_speed_mean,
                     past_heading_change=past_heading_change,
+                    lead_gap=lead_gap,
+                    lead_speed=lead_speed,
+                    lead_closing_speed=lead_closing_speed,
                     future_dx_1s=fut_dx_1s,
                     future_dy_1s=fut_dy_1s,
                     future_dx_3s=fut_dx_3s,
